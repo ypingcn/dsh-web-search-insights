@@ -13,7 +13,7 @@
  *
  * @module dsh-web-search-logger/projection
  */
-import { displayUrl, extractUrls, readSources } from './url-utils.js'
+import { displayUrl, extractUrls, normalizeUrl, readSources } from './url-utils.js'
 
 /** Projection key shared with the client bundle. */
 export const KEY = 'webSearchStats'
@@ -64,6 +64,8 @@ function emptyTurn() {
     cited: 0,
     local: 0,
     occurrences: 0,
+    fetches: [],
+    fetchCount: 0,
   }
 }
 
@@ -100,6 +102,22 @@ function parseQueries(raw) {
     return args.queries.filter((query) => typeof query === 'string' && query.trim() !== '')
   } catch {
     return []
+  }
+}
+
+/**
+ * Parse the URL argument of a `web_fetch` call.
+ *
+ * @param {unknown} raw - raw arguments JSON.
+ * @returns {string} normalized URL, or `''`.
+ */
+function parseFetchUrl(raw) {
+  if (typeof raw !== 'string' || raw === '') return ''
+  try {
+    const args = JSON.parse(raw)
+    return typeof args?.url === 'string' ? normalizeUrl(args.url) : ''
+  } catch {
+    return ''
   }
 }
 
@@ -205,6 +223,7 @@ function apply(state, event) {
           name: data.name,
           turn: typeof data.turn === 'number' ? data.turn : 0,
           queries: parseQueries(data.arguments),
+          url: parseFetchUrl(data.arguments),
           done: false,
         },
       }
@@ -220,13 +239,58 @@ function apply(state, event) {
       // A pruner may append the same result again with only `content` changed.
       // Pair once so occurrences and source counts stay idempotent.
       if (call === undefined || call.done === true) return state
-      if (call.name !== 'web_search') {
-        // Non-search tool pairings are only needed until their result arrives.
+      if (call.name !== 'web_search' && call.name !== 'web_fetch') {
+        // Other tool pairings are only needed until their result arrives.
         const calls = { ...state.calls }
         delete calls[callId]
         return { ...state, calls }
       }
       const calls = { ...state.calls, [callId]: { ...call, done: true } }
+
+      if (call.name === 'web_fetch') {
+        if (data.message?.isError === true || data.error !== undefined) return { ...state, calls }
+        const requested = typeof call.url === 'string' ? call.url : ''
+        const final = typeof data.meta?.url === 'string' ? normalizeUrl(data.meta.url) : ''
+        const key = final !== '' ? final : requested
+        if (key === '') return { ...state, calls }
+        const turn = typeof call.turn === 'number' && call.turn > 0 ? call.turn : data.turn
+        if (typeof turn !== 'number') return { ...state, calls }
+        const current = state.turns[String(turn)] ?? emptyTurn()
+        const fetches = [...current.fetches]
+        if (!fetches.some((fetch) => fetch.key === key)) {
+          fetches.push({
+            key,
+            url: displayUrl(typeof data.meta?.url === 'string' ? data.meta.url : call.url),
+            ...(typeof data.meta?.statusCode === 'number' ? { statusCode: data.meta.statusCode } : {}),
+          })
+        }
+        const fetchedKeys = new Set([key, requested].filter((item) => item !== ''))
+        const sources = current.sources.map((source) =>
+          fetchedKeys.has(source.key) && source.fetched !== true
+            ? { ...source, fetched: true }
+            : source,
+        )
+        const sessionKeys = new Set(state.fetchedKeys)
+        sessionKeys.add(key)
+        return {
+          ...state,
+          calls,
+          fetchedKeys: [...sessionKeys].slice(-MAX_POOL),
+          turns: {
+            ...state.turns,
+            [String(turn)]: {
+              ...current,
+              sources,
+              fetches,
+              fetchCount: fetches.length,
+            },
+          },
+          session: {
+            ...state.session,
+            fetched: Math.min(sessionKeys.size, MAX_POOL),
+          },
+        }
+      }
 
       const turn = typeof call.turn === 'number' && call.turn > 0 ? call.turn : data.turn
       if (typeof turn !== 'number') return { ...state, calls }
@@ -249,7 +313,11 @@ function apply(state, event) {
           continue
         }
         byKey.set(source.key, sources.length)
-        sources.push({ ...source, cited: false })
+        sources.push({
+          ...source,
+          cited: false,
+          ...(current.fetches.some((fetch) => fetch.key === source.key) ? { fetched: true } : {}),
+        })
       }
       const pool = [...state.pool]
       const poolSet = new Set(pool)
@@ -326,7 +394,8 @@ function init(_header, inheritedEventCount) {
     turns: {},
     pool: [],
     citedKeys: [],
-    session: { searches: 0, returned: 0, cited: 0, occurrences: 0 },
+    fetchedKeys: [],
+    session: { searches: 0, returned: 0, cited: 0, occurrences: 0, fetched: 0 },
   }
 }
 
@@ -354,11 +423,17 @@ function view(state) {
       local: turn.local,
       occurrences: turn.occurrences,
       queries: turn.queries,
+      fetchCount: turn.fetchCount ?? 0,
+      fetches: (turn.fetches ?? []).map((fetch) => ({
+        url: fetch.url,
+        ...(fetch.statusCode !== undefined ? { statusCode: fetch.statusCode } : {}),
+      })),
       sourceCount: turn.sources.length,
       sources: turn.sources.slice(0, MAX_SOURCES_PER_TURN).map((source) => ({
         url: displayUrl(source.url),
         title: source.title,
         cited: source.cited,
+        ...(source.fetched === true ? { fetched: true } : {}),
         ...(source.icon !== undefined ? { icon: source.icon } : {}),
         ...(source.authority !== undefined ? { authority: source.authority } : {}),
         ...(source.rerankScore !== undefined ? { rerankScore: source.rerankScore } : {}),
@@ -374,6 +449,7 @@ function view(state) {
       returned: state.session.returned,
       cited: state.session.cited,
       occurrences: state.session.occurrences,
+      fetched: state.session.fetched ?? 0,
     },
     turns,
     ...(turnKeys.length > 0 ? { latestTurn: Number(turnKeys[0]) } : {}),
@@ -385,7 +461,7 @@ function view(state) {
 /** Registered projection definition. */
 export const webSearchStatsDefinition = {
   key: KEY,
-  stateVersion: 1,
+  stateVersion: 2,
   stateSchema: objectSchema,
   init,
   apply,

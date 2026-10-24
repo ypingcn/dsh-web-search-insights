@@ -28,6 +28,23 @@ const result = (seq, turn, callId, sources) =>
     },
   })
 
+const fetchCall = (seq, turn, callId, url) =>
+  event(seq, 'tool/call', {
+    turn,
+    step: 1,
+    callId,
+    name: 'web_fetch',
+    arguments: JSON.stringify({ url }),
+  })
+
+const fetchResult = (seq, turn, callId, url, statusCode = 200) =>
+  event(seq, 'tool/result', {
+    turn,
+    step: 1,
+    message: { role: 'tool', source: { kind: 'tool', callId }, content: [] },
+    meta: { url, statusCode, truncated: false },
+  })
+
 const answer = (seq, turn, text) =>
   event(seq, 'assistant/message', {
     turn,
@@ -64,13 +81,15 @@ assert.deepEqual(wire.turns['1'], {
   local: 1,
   occurrences: 1,
   queries: ['alpha'],
+  fetchCount: 0,
+  fetches: [],
   sourceCount: 2,
   sources: [
     { url: 'https://a.test/x?utm_source=news', title: 'A', cited: true },
     { url: 'https://b.test/y', title: 'B', cited: false },
   ],
 })
-assert.deepEqual(wire.session, { searches: 1, returned: 2, cited: 1, occurrences: 1 })
+assert.deepEqual(wire.session, { searches: 1, returned: 2, cited: 1, occurrences: 1, fetched: 0 })
 
 // 2. Turn 2 has no new search but cites both earlier sources.
 state = definition.apply(state, answer(4, 2, 'Again [A](https://a.test/x) and [B](https://b.test/y).'))
@@ -161,5 +180,27 @@ assert.deepEqual(metadataWire.turns['7'].sources[0], {
   authority: 'm.test',
   rerankScore: 0.87,
 })
+
+
+// 8. A web_fetch call marks the matching search source as "may have read".
+const fetchState = fold([
+  call(30, 8, 's1', 'web_search', ['fetch']),
+  result(31, 8, 's1', [
+    ['https://a.test/x', 'A'],
+    ['https://b.test/y', 'B'],
+  ]),
+  fetchCall(32, 8, 'f1', 'https://a.test/x'),
+  fetchResult(33, 8, 'f1', 'https://a.test/x', 200),
+  answer(34, 8, '[B](https://b.test/y)'),
+  end(35, 8),
+])
+const fetchWire = definition.wire.view(fetchState)
+assert.equal(fetchWire.turns['8'].fetchCount, 1)
+assert.deepEqual(fetchWire.turns['8'].fetches, [{ url: 'https://a.test/x', statusCode: 200 }])
+assert.equal(fetchWire.turns['8'].sources[0].fetched, true)
+assert.equal(fetchWire.turns['8'].sources[0].cited, false)
+assert.equal(fetchWire.turns['8'].sources[1].cited, true)
+assert.equal(fetchWire.turns['8'].sources[1].fetched, undefined)
+assert.equal(fetchWire.session.fetched, 1)
 
 console.log('projection tests passed')
