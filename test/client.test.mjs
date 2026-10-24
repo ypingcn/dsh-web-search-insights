@@ -196,8 +196,27 @@ assert.match(panelText, /会话累计引用 2 个来源（共 3 次） · 返回
 assert.match(panelText, /本轮回答引用 2 个来源，其中 1 个来自本轮搜索；本轮共返回 2 个来源。/)
 assert.match(panelText, /已引用/)
 assert.match(panelText, /可能看过/)
-assert.match(panelText, /未引用/)
+assert.match(panelText, /wsl-source-status/)
+assert.match(panelText, /已引用/)
+assert.match(panelText, /"@"/)
 assert.match(panelText, /获取的网页（最新数据）/)
+assert.equal((panelText.match(/"className":"wsl-source-status"/g) ?? []).length, 6, 'mixed list reserves the status column for every row')
+
+const noStatusFixture = {
+  ...fixture,
+  turns: {
+    1: {
+      ...fixture.turns[1],
+      sources: fixture.turns[1].sources.map((source) => ({ ...source, cited: false, fetched: false })),
+    },
+  },
+}
+const noStatusPanel = pane.component({
+  useProjection: () => noStatusFixture,
+  useTabInfo: () => ({ tab: { navigation: { params: { sessionId: 'session-1', turn: 1 }, revision: 3 } } }),
+  t,
+})
+assert.equal((JSON.stringify(noStatusPanel).match(/wsl-source-status/g) ?? []).length, 0, 'no-status list removes the column entirely')
 
 // Without projection data both surfaces degrade to "unavailable" instead of throwing.
 const emptyEntry = turnTail.component({
