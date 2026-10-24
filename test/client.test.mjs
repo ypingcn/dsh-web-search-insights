@@ -103,7 +103,7 @@ assert.ok(tabs.some((tab) => tab && tab.kind === 'web-search-logger'), 'sidebar 
 
 const fixture = {
   v: 1,
-  session: { searches: 2, returned: 3, cited: 2, occurrences: 3 },
+  session: { searches: 2, returned: 3, cited: 2, occurrences: 3, fetched: 2 },
   latestTurn: 1,
   turns: {
     1: {
@@ -114,10 +114,15 @@ const fixture = {
       occurrences: 2,
       queries: ['alpha'],
       sourceCount: 6,
+      fetchCount: 2,
+      fetches: [
+        { url: 'https://a.test/x', statusCode: 200 },
+        { url: 'https://c.test/z', statusCode: 200 },
+      ],
       sources: [
         { url: 'https://a.test/x', title: 'A', cited: true, rerankScore: 2, icon: 'https://icons.test/a.png' },
         { url: 'https://b.test/y', title: 'B', cited: true, rerankScore: 1, icon: 'https://icons.test/b.png' },
-        { url: 'https://c.test/z', title: 'C', cited: false, rerankScore: 9, icon: 'https://icons.test/c.png' },
+        { url: 'https://c.test/z', title: 'C', cited: false, fetched: true, rerankScore: 9, icon: 'https://icons.test/c.png' },
         { url: 'https://d.test/z', title: 'D', cited: false, rerankScore: 8, icon: 'https://icons.test/d.png' },
         { url: 'https://e.test/z', title: 'E', cited: false, rerankScore: 7, icon: 'https://icons.test/e.png' },
         { url: 'https://f.test/z', title: 'F', cited: false, rerankScore: 6 },
@@ -136,6 +141,7 @@ const entryElement = turnTail.component({
 const entryText = JSON.stringify(entryElement)
 assert.match(entryText, /本轮引用 2 条（含历史来源）/)
 assert.match(entryText, /会话累计 2 条/)
+assert.match(entryText, /参考了 2 个网页的最新数据/)
 
 const images = []
 function collectImages(node) {
@@ -164,7 +170,9 @@ assert.match(panelText, /搜索记录/)
 assert.match(panelText, /会话累计引用 2 个来源/)
 assert.match(panelText, /本轮回答引用 2 个（含历史来源）/)
 assert.match(panelText, /已引用/)
+assert.match(panelText, /可能看过/)
 assert.match(panelText, /未引用/)
+assert.match(panelText, /获取的网页（最新数据）/)
 
 // Without projection data both surfaces degrade to "unavailable" instead of throwing.
 const emptyEntry = turnTail.component({
