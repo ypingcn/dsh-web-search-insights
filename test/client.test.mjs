@@ -139,9 +139,34 @@ const entryElement = turnTail.component({
   openPanel: () => {},
 })
 const entryText = JSON.stringify(entryElement)
-assert.match(entryText, /本轮引用 2 条 ·/)
-assert.match(entryText, /会话累计 2 条/)
-assert.match(entryText, /参考了 2 个网页的最新数据/)
+assert.match(entryText, /本轮引用 2 个网页 · 会话累计 2 个网页 · 主动抓取 2 个网页数据/)
+assert.match(entryText, /查看/)
+
+const zeroFixture = {
+  ...fixture,
+  turns: {
+    ...fixture.turns,
+    2: {
+      searchCalls: 1,
+      returned: 4,
+      cited: 0,
+      local: 0,
+      occurrences: 0,
+      queries: ['zero'],
+      sourceCount: 4,
+      fetchCount: 0,
+      fetches: [],
+      sources: [],
+    },
+  },
+}
+const zeroEntry = turnTail.component({
+  turn: { turn: 2 },
+  useProjection: (_key, selector) => selector(zeroFixture),
+  t,
+  openPanel: () => {},
+})
+assert.match(JSON.stringify(zeroEntry), /本轮引用 0 个网页 · 会话累计 2 个网页 · 搜索返回 4 个网页/)
 
 const images = []
 function collectImages(node) {
