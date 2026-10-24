@@ -10,15 +10,20 @@
       "types": "./src/index.d.ts",
       "default": "./src/index.js"
     },
+    "./client": {
+      "default": "./lib/client.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "src",
+    "lib/client.js",
     "cordis.patch.yml",
     "README.md"
   ],
   "scripts": {
-    "test": "node test/unit.mjs"
+    "test": "node test/url-utils.test.mjs && node test/projection.test.mjs && node test/client.test.mjs && node test/unit.mjs",
+    "check": "node --check lib/client.js"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
@@ -30,6 +35,15 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
+      ]
     },
     "compatibility": {
       "dshReleases": {
