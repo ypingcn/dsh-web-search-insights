@@ -23,7 +23,7 @@ const result = (seq, turn, callId, sources) =>
     step: 1,
     message: { role: 'tool', source: { kind: 'tool', callId }, content: [] },
     meta: {
-      sources: sources.map(([url, title]) => ({ url, title })),
+      sources: sources.map(([url, title, extra = {}]) => ({ url, title, ...extra })),
       truncated: false,
     },
   })
@@ -133,5 +133,33 @@ assert.equal(wire.session.cited, 1)
 // 6. Wire schema and JSON-shape invariants.
 assert.doesNotThrow(() => definition.wire.viewSchema.parse(wire))
 assert.equal(JSON.stringify(wire).includes('undefined'), false)
+
+
+// 7. Provider metadata (site_icon / authority / rerank_score) survives the fold.
+const metadataState = fold([
+  call(20, 7, 'meta', 'web_search', ['metadata']),
+  result(21, 7, 'meta', [
+    [
+      'https://m.test/a',
+      'Meta A',
+      {
+        site_icon: 'https://icons.test/a.png',
+        authority: 'm.test',
+        rerank_score: 0.87,
+      },
+    ],
+  ]),
+  answer(22, 7, '[Meta A](https://m.test/a)'),
+  end(23, 7),
+])
+const metadataWire = definition.wire.view(metadataState)
+assert.deepEqual(metadataWire.turns['7'].sources[0], {
+  url: 'https://m.test/a',
+  title: 'Meta A',
+  cited: true,
+  icon: 'https://icons.test/a.png',
+  authority: 'm.test',
+  rerankScore: 0.87,
+})
 
 console.log('projection tests passed')

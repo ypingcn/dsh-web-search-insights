@@ -131,15 +131,64 @@ export function extractUrls(text) {
 }
 
 /**
+ * Read a usable `site_icon` value: a small data URI or an http(s) URL.
+ *
+ * @param {unknown} value - provider `site_icon`.
+ * @returns {string} icon reference, or `''` when unusable.
+ */
+function readIcon(value) {
+  if (typeof value !== 'string' || value === '') return ''
+  const icon = value.trim()
+  if (icon.startsWith('data:image/')) return icon.length <= 4096 ? icon : ''
+  if (icon.length > 2048) return ''
+  try {
+    const url = new URL(icon)
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Read a finite rerank score under the documented snake_case name (with a
+ * couple of tolerant aliases for other providers).
+ *
+ * @param {Record<string, unknown>} item - one provider source.
+ * @returns {number | undefined} score.
+ */
+function readRerankScore(item) {
+  for (const field of ['rerank_score', 'rerankScore', 'score']) {
+    const value = item[field]
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) return parsed
+    }
+  }
+  return undefined
+}
+
+/**
  * Read the registry-style source list from `web_search` presentation meta.
  *
+ * The canonical `WebSource` only promises url/title/snippet/publishedAt, but a
+ * custom search provider may attach site_icon/authority/rerank_score. Those are
+ * preserved when present and ignored when absent.
+ *
  * @param {unknown} meta - persisted `tool/result` meta.
- * @returns {Array<{ key: string, url: string, title: string }>} deduplicated sources.
+ * @returns {Array<{
+ *   key: string,
+ *   url: string,
+ *   title: string,
+ *   icon?: string,
+ *   authority?: string,
+ *   rerankScore?: number,
+ * }>} deduplicated sources.
  */
 export function readSources(meta) {
   if (meta === null || typeof meta !== 'object') return []
   const list = Array.isArray(meta.sources) ? meta.sources : []
-  /** @type {Array<{ key: string, url: string, title: string }>} */
+  /** @type {Array<any>} */
   const sources = []
   const seen = new Set()
   for (const item of list) {
@@ -148,10 +197,16 @@ export function readSources(meta) {
     const key = normalizeUrl(rawUrl)
     if (key === '' || seen.has(key)) continue
     seen.add(key)
+    const icon = readIcon(item.site_icon ?? item.siteIcon ?? item.icon)
+    const authority = typeof item.authority === 'string' ? item.authority.slice(0, 200) : ''
+    const rerankScore = readRerankScore(item)
     sources.push({
       key,
       url: displayUrl(rawUrl),
       title: typeof item.title === 'string' ? item.title : '',
+      ...(icon !== '' ? { icon } : {}),
+      ...(authority !== '' ? { authority } : {}),
+      ...(rerankScore !== undefined ? { rerankScore } : {}),
     })
   }
   return sources

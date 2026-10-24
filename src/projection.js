@@ -232,10 +232,23 @@ function apply(state, event) {
       if (typeof turn !== 'number') return { ...state, calls }
       const current = state.turns[String(turn)] ?? emptyTurn()
       const sources = [...current.sources]
-      const seen = new Set(sources.map((source) => source.key))
+      const byKey = new Map(sources.map((source, index) => [source.key, index]))
       for (const source of readSources(data.meta)) {
-        if (seen.has(source.key)) continue
-        seen.add(source.key)
+        const existing = byKey.get(source.key)
+        if (existing !== undefined) {
+          const previous = sources[existing]
+          sources[existing] = {
+            ...previous,
+            ...(previous.title === '' && source.title !== '' ? { title: source.title } : {}),
+            ...(previous.icon === undefined && source.icon !== undefined ? { icon: source.icon } : {}),
+            ...(previous.authority === undefined && source.authority !== undefined ? { authority: source.authority } : {}),
+            ...(previous.rerankScore === undefined && source.rerankScore !== undefined
+              ? { rerankScore: source.rerankScore }
+              : {}),
+          }
+          continue
+        }
+        byKey.set(source.key, sources.length)
         sources.push({ ...source, cited: false })
       }
       const pool = [...state.pool]
@@ -346,6 +359,9 @@ function view(state) {
         url: displayUrl(source.url),
         title: source.title,
         cited: source.cited,
+        ...(source.icon !== undefined ? { icon: source.icon } : {}),
+        ...(source.authority !== undefined ? { authority: source.authority } : {}),
+        ...(source.rerankScore !== undefined ? { rerankScore: source.rerankScore } : {}),
       })),
       ...(turn.sources.length > MAX_SOURCES_PER_TURN ? { sourcesTruncated: true } : {}),
     }
