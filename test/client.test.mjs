@@ -113,10 +113,14 @@ const fixture = {
       local: 1,
       occurrences: 2,
       queries: ['alpha'],
-      sourceCount: 2,
+      sourceCount: 6,
       sources: [
-        { url: 'https://a.test/x', title: 'A', cited: true },
-        { url: 'https://b.test/y', title: 'B', cited: false },
+        { url: 'https://a.test/x', title: 'A', cited: true, rerankScore: 2, icon: 'https://icons.test/a.png' },
+        { url: 'https://b.test/y', title: 'B', cited: true, rerankScore: 1, icon: 'https://icons.test/b.png' },
+        { url: 'https://c.test/z', title: 'C', cited: false, rerankScore: 9, icon: 'https://icons.test/c.png' },
+        { url: 'https://d.test/z', title: 'D', cited: false, rerankScore: 8, icon: 'https://icons.test/d.png' },
+        { url: 'https://e.test/z', title: 'E', cited: false, rerankScore: 7, icon: 'https://icons.test/e.png' },
+        { url: 'https://f.test/z', title: 'F', cited: false, rerankScore: 6 },
       ],
     },
   },
@@ -132,6 +136,21 @@ const entryElement = turnTail.component({
 const entryText = JSON.stringify(entryElement)
 assert.match(entryText, /本轮引用 2 条（含历史来源）/)
 assert.match(entryText, /会话累计 2 条/)
+
+const images = []
+function collectImages(node) {
+  if (node === null || typeof node !== 'object') return
+  if (node.type === 'img') images.push(node.props.src)
+  for (const child of node.children ?? []) collectImages(child)
+}
+collectImages(entryElement)
+assert.deepEqual(images, [
+  'https://icons.test/a.png',
+  'https://icons.test/b.png',
+  'https://icons.test/c.png',
+  'https://icons.test/d.png',
+  'https://icons.test/e.png',
+], 'cited icons first, then uncited by rerank score, capped at five')
 
 const panelElement = pane.component({
   useProjection: () => fixture,
