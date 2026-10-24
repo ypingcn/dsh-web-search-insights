@@ -139,7 +139,7 @@ const entryElement = turnTail.component({
   openPanel: () => {},
 })
 const entryText = JSON.stringify(entryElement)
-assert.match(entryText, /本轮引用 2 条（含历史来源）/)
+assert.match(entryText, /本轮引用 2 条 ·/)
 assert.match(entryText, /会话累计 2 条/)
 assert.match(entryText, /参考了 2 个网页的最新数据/)
 
