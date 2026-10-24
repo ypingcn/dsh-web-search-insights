@@ -117,7 +117,7 @@ const fixture = {
       fetchCount: 2,
       fetches: [
         { url: 'https://a.test/x', statusCode: 200 },
-        { url: 'https://c.test/z', statusCode: 200 },
+        { url: 'https://c.test/z', statusCode: 500 },
       ],
       sources: [
         { url: 'https://a.test/x', title: 'A', cited: true, rerankScore: 2, icon: 'https://icons.test/a.png' },
@@ -199,7 +199,13 @@ assert.match(panelText, /可能看过/)
 assert.match(panelText, /wsl-source-status/)
 assert.match(panelText, /已引用/)
 assert.match(panelText, /"@"/)
-assert.match(panelText, /获取的网页（最新数据）/)
+assert.match(panelText, /主动抓取数据的页面/)
+assert.match(panelText, /wsl-fetch-ok/)
+assert.match(panelText, /wsl-fetch-err/)
+assert.match(panelText, /"200"/)
+assert.match(panelText, /"500"/)
+assert.doesNotMatch(panelText, /HTTP 200/)
+
 assert.equal((panelText.match(/"className":"wsl-source-status"/g) ?? []).length, 6, 'mixed list reserves the status column for every row')
 
 const noStatusFixture = {
