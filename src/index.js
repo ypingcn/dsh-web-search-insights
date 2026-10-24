@@ -15,10 +15,12 @@
  * @module dsh-web-search-logger
  */
 import { Config, normalizeConfig } from './config.js'
+import { webSearchStatsDefinition } from './projection.js'
 import { buildRecord } from './record.js'
 import { JsonlWriter } from './writer.js'
 
 export { Config }
+export { webSearchStatsDefinition } from './projection.js'
 export { buildRecord, normalizeQueries } from './record.js'
 export { JsonlWriter } from './writer.js'
 
@@ -38,6 +40,14 @@ export function apply(ctx, config) {
   }
   const options = normalizeConfig(config)
   const writer = new JsonlWriter(options.file, ctx.logger)
+
+  // Feed the client-side statistics panel. `ctx.inject` keeps the JSONL log
+  // working in profiles that do not compose the projection service.
+  if (options.enabled && typeof ctx.inject === 'function') {
+    ctx.inject(['sessionProjections'], (scope) => {
+      scope.sessionProjections.register(webSearchStatsDefinition)
+    })
+  }
 
   ctx.on('tools/result', (exec, result) => {
     if (!options.enabled) return
