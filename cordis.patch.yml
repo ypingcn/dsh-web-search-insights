@@ -1,0 +1,16 @@
+# Bundle patch layer for dsh-web-search-logger.
+#
+# This file only matters when the package is installed as a bundle
+# (`dsh plugin add` / plugin manager). It inserts the package's main entry as a
+# plain Cordis plugin row; the row id is `web-search-logger`.
+#
+# Per-profile overrides belong in the profile's own cordis.patch.yml and target
+# the same row id, e.g.
+#
+#   - id: web-search-logger
+#     name: dsh-web-search-logger
+#     config:
+#       file: ~/.dsh/logs/web-search.jsonl
+- insert:
+    - id: web-search-logger
+      name: dsh-web-search-logger
