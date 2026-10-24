@@ -220,8 +220,13 @@ function apply(state, event) {
       // A pruner may append the same result again with only `content` changed.
       // Pair once so occurrences and source counts stay idempotent.
       if (call === undefined || call.done === true) return state
+      if (call.name !== 'web_search') {
+        // Non-search tool pairings are only needed until their result arrives.
+        const calls = { ...state.calls }
+        delete calls[callId]
+        return { ...state, calls }
+      }
       const calls = { ...state.calls, [callId]: { ...call, done: true } }
-      if (call.name !== 'web_search') return { ...state, calls }
 
       const turn = typeof call.turn === 'number' && call.turn > 0 ? call.turn : data.turn
       if (typeof turn !== 'number') return { ...state, calls }
