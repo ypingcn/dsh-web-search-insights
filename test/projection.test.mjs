@@ -4,7 +4,7 @@
  *   node test/projection.test.mjs
  */
 import assert from 'node:assert/strict'
-import { webSearchStatsDefinition as definition } from '../src/projection.js'
+import { webSearchInsightsDefinition as definition } from '../src/projection.js'
 
 const event = (seq, type, data) => ({ seq, type, data })
 

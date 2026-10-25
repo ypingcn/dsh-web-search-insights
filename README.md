@@ -1,13 +1,15 @@
-# dsh-web-search-logger
+# dsh-web-search-insights
 
-DeepSeek Harness（DSH）插件：每当 Agent 通过 `web_search` 工具搜索时，记录**关键词**与**结果网址 + 标题**，并在界面上展示本轮/本会话的引用统计。
+DeepSeek Harness（DSH）插件：把 Agent 的 `web_search` 使用情况做成「可审计的日志 + 可回看的引用统计 + 两处界面」。
 
-除了 JSONL 审计日志，现在还提供两层界面：每条回答末尾的引用入口，以及右侧栏的「搜索记录」面板。
+- **审计日志**：每次 `web_search` 的关键词与结果网址 + 标题写入 JSONL；
+- **会话统计**：`webSearchInsights` 投影产出本轮/本会话的引用来源、返回来源、被 `web_fetch` 抓取过的页面；
+- **界面**：每条回答末尾的引用入口，以及右侧栏的「搜索记录」面板。
 
 ## 目录结构
 
 ```text
-dsh-web-search-logger/
+dsh-web-search-insights/
 ├── package.json          # 插件包；dsh.bundle.patch 指向 cordis.patch.yml
 ├── cordis.patch.yml      # 作为 bundle 安装时插入插件行
 ├── src/
@@ -52,6 +54,8 @@ DSH 的工具注册表在每次调用结束后发出 `tools/result`，参数为�
 插件订阅事件，过滤 `exec.name`，从 `arguments.queries` 取关键词、从 `value.sources` 取 `url`/`title`，然后写入 JSONL。日志失败只上报 `ctx.logger.warn`，不会中断搜索。
 
 选这个钩子的原因：与搜索提供方无关（DeepSeek 官方、Exa、自定义 provider 都走同一个工具），拿到的是最终合并去重后的结构化来源，不需要解析模型可见文本。
+
+统计与界面走的是第二条数据通路：`projection.js` 向 `sessionProjections` 注册 `webSearchInsights` 单元，折叠持久会话事件（`tool/call`、`tool/result`、`assistant/message`、`turn/end`）得到每轮引用与来源，再由 `lib/client.js` 渲染。两条通路互不依赖：日志写失败不影响统计，`sessionProjections` 缺席时日志照写。
 
 ## 已实现
 
@@ -115,6 +119,8 @@ DSH 的工具注册表在每次调用结束后发出 `tools/result`，参数为�
 
 ## 安装
 
+> 0.1.0 起包名与插件名由 `dsh-web-search-logger` 改为 `dsh-web-search-insights`：profile 依赖名、`dsh.profile.bundles` 条目和 loader row id 需一并换成新名字，旧安装建议先 `dsh plugin --profile web remove dsh-web-search-logger` 再按下面方式重装。
+>
 > 回答末尾入口和右侧栏面板需要浏览器端 bundle，只有**方式 B（作为 bundle 安装）**会加载；方式 A 只提供 JSONL 与 Host 统计，不显示界面。
 
 ### 方式 A：直接路径插入（本地开发最快）
@@ -123,8 +129,8 @@ DSH 的工具注册表在每次调用结束后发出 `tools/result`，参数为�
 
 ```yaml
 - insert:
-    - id: web-search-logger
-      name: /home/ypingcn/dsh-workspace/dsh-web-search-logger/src/index.js
+    - id: web-search-insights
+      name: /path/to/dsh-web-search-insights/src/index.js
       config:
         file: ~/.dsh/logs/web-search.jsonl
 ```
@@ -136,14 +142,14 @@ web profile 默认启用 HMR，保存后会重组并挂载新增行；改已有�
 ### 方式 B：作为 bundle 安装
 
 ```bash
-dsh plugin --profile web add link:/home/ypingcn/dsh-workspace/dsh-web-search-logger
+dsh plugin --profile web add link:/path/to/dsh-web-search-insights
 ```
 
-包声明了 `dsh.bundle.patch`，安装后会被自动加入 `dsh.profile.bundles`（未自动加入时手动追加）。之后可在 profile 的 `cordis.patch.yml` 里按 row id `web-search-logger` 覆盖配置：
+包声明了 `dsh.bundle.patch`，安装后会被自动加入 `dsh.profile.bundles`（未自动加入时手动追加）。之后可在 profile 的 `cordis.patch.yml` 里按 row id `web-search-insights` 覆盖配置：
 
 ```yaml
-- id: web-search-logger
-  name: dsh-web-search-logger
+- id: web-search-insights
+  name: dsh-web-search-insights
   config:
     includeSnippet: true
 ```
@@ -177,7 +183,7 @@ tail -n 5 ~/.dsh/logs/web-search.jsonl | jq -r '.queries[], (.sources[] | "  - \
 ## 测试
 
 ```bash
-cd /home/ypingcn/dsh-workspace/dsh-web-search-logger
+cd /path/to/dsh-web-search-insights
 npm test
 ```
 

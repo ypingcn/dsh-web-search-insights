@@ -66,7 +66,7 @@ async function readRecords(file) {
   return text.split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line))
 }
 
-const root = await mkdtemp(join(tmpdir(), 'dsh-web-search-logger-'))
+const root = await mkdtemp(join(tmpdir(), 'dsh-web-search-insights-'))
 
 try {
   // 1. Success: keywords, titles, URLs, session metadata; snippet opt-in.
@@ -170,7 +170,7 @@ try {
     console.log('note: @deepseek-ai/schemastery unavailable; Config schema assertions skipped')
   }
 
-  console.log(`dsh-web-search-logger (${name}): unit tests passed`)
+  console.log(`dsh-web-search-insights (${name}): unit tests passed`)
 } finally {
   await rm(root, { recursive: true, force: true })
 }

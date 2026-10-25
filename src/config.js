@@ -6,7 +6,7 @@
  * it does not (e.g. a plugin inserted by absolute path), `normalizeConfig`
  * provides the same defaults and fails loud on wrong types.
  *
- * @module dsh-web-search-logger/config
+ * @module dsh-web-search-insights/config
  */
 import { homedir } from 'node:os'
 import { isAbsolute, resolve } from 'node:path'
@@ -65,19 +65,19 @@ export function resolveLogFile(file) {
  */
 function assertConfigTypes(source) {
   if (source.enabled !== undefined && typeof source.enabled !== 'boolean') {
-    throw new TypeError('web-search-logger: `enabled` must be a boolean')
+    throw new TypeError('web-search-insights: `enabled` must be a boolean')
   }
   for (const field of ['includeSnippet', 'includeAnswer', 'recordErrors', 'console']) {
     if (source[field] !== undefined && typeof source[field] !== 'boolean') {
-      throw new TypeError(`web-search-logger: \`${field}\` must be a boolean`)
+      throw new TypeError(`web-search-insights: \`${field}\` must be a boolean`)
     }
   }
   if (source.file !== undefined && (typeof source.file !== 'string' || source.file.trim() === '')) {
-    throw new TypeError('web-search-logger: `file` must be a non-empty string')
+    throw new TypeError('web-search-insights: `file` must be a non-empty string')
   }
   if (source.tools !== undefined) {
     if (!Array.isArray(source.tools) || source.tools.some((tool) => typeof tool !== 'string' || tool === '')) {
-      throw new TypeError('web-search-logger: `tools` must be an array of non-empty tool names')
+      throw new TypeError('web-search-insights: `tools` must be an array of non-empty tool names')
     }
   }
 }

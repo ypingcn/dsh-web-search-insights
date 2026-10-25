@@ -6,7 +6,7 @@
  * parameters; matching a cited URL to a returned source without normalizing
  * would silently miss most citations.
  *
- * @module dsh-web-search-logger/url-utils
+ * @module dsh-web-search-insights/url-utils
  */
 
 /** Query parameters that never identify a different document. */

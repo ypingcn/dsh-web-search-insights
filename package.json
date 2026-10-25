@@ -1,7 +1,7 @@
 {
-  "name": "dsh-web-search-logger",
+  "name": "dsh-web-search-insights",
   "version": "0.1.0",
-  "description": "DeepSeek Harness plugin framework: log web_search queries and returned result URLs/titles",
+  "description": "DeepSeek Harness plugin: log web_search queries and returned URLs, project per-turn citation statistics, and render the answer-tail entry plus the right-sidebar search panel",
   "type": "module",
   "main": "src/index.js",
   "types": "src/index.d.ts",
@@ -57,7 +57,9 @@
     "cordis",
     "plugin",
     "web-search",
-    "logging"
+    "insights",
+    "statistics",
+    "citations"
   ],
   "license": "MIT"
 }

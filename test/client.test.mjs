@@ -30,12 +30,12 @@ const fakeReact = {
 
 await import('../lib/client.js')
 assert.ok(captured, 'bundle must register itself through __ModuleLoader__')
-assert.equal(captured.id, 'dsh-web-search-logger')
+assert.equal(captured.id, 'dsh-web-search-insights')
 const client = captured.factory((name) => {
   if (name === 'react') return fakeReact
   throw new Error(`unexpected client require: ${name}`)
 })
-assert.equal(client.name, 'dsh-web-search-logger')
+assert.equal(client.name, 'dsh-web-search-insights')
 assert.equal(typeof client.apply, 'function')
 assert.ok(client.inject.includes('slots'))
 assert.ok(client.inject.includes('sidebarRightTabs'))
@@ -90,16 +90,16 @@ client.apply(fakeCtx)
 
 const turnTail = registrations.find((entry) => entry.options.name === 'conversation.chat.turnTail')
 assert.ok(turnTail, 'turn-tail entry must be registered')
-assert.equal(turnTail.options.id, 'dsh-web-search-logger')
+assert.equal(turnTail.options.id, 'dsh-web-search-insights')
 const injected = turnTail.options.inject('session-1')
 injected.openPanel(3)
-assert.equal(opened.kind, 'web-search-logger')
+assert.equal(opened.kind, 'web-search-insights')
 assert.deepEqual(opened.options.params, { sessionId: 'session-1', turn: 3 })
 
 const pane = registrations.find((entry) => entry.options.name === 'sidebar.right.pane.tab')
 assert.ok(pane, 'sidebar pane body must be registered')
-assert.equal(pane.options.key, 'dsh-web-search-logger')
-assert.ok(tabs.some((tab) => tab && tab.kind === 'web-search-logger'), 'sidebar type must be registered')
+assert.equal(pane.options.key, 'dsh-web-search-insights')
+assert.ok(tabs.some((tab) => tab && tab.kind === 'web-search-insights'), 'sidebar type must be registered')
 
 const fixture = {
   v: 1,
@@ -131,7 +131,7 @@ const fixture = {
   },
 }
 
-const t = fakeCtx.locale.bind('dsh-web-search-logger')
+const t = fakeCtx.locale.bind('dsh-web-search-insights')
 const entryElement = turnTail.component({
   turn: { turn: 1 },
   useProjection: (_key, selector) => selector(fixture),

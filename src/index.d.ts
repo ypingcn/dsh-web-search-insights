@@ -1,9 +1,9 @@
 /**
- * Type surface for dsh-web-search-logger.
+ * Type surface for dsh-web-search-insights.
  */
 import type { Context } from '@deepseek-ai/cordis'
 
-export declare const name: 'web-search-logger'
+export declare const name: 'web-search-insights'
 
 /** One JSONL entry appended by the plugin. */
 export interface WebSearchLogRecord {

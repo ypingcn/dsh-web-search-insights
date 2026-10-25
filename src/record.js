@@ -4,7 +4,7 @@
  * This is the extension point for future fields (turn/step, provider request
  * id, per-query attribution, …): keep `buildRecord` pure and side-effect free.
  *
- * @module dsh-web-search-logger/record
+ * @module dsh-web-search-insights/record
  */
 
 /**

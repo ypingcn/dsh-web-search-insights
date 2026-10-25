@@ -5,7 +5,7 @@
  * of awaited in the listener. `flush()` lets the plugin's disposer drain the
  * queue on unload and gives tests a deterministic barrier.
  *
- * @module dsh-web-search-logger/writer
+ * @module dsh-web-search-insights/writer
  */
 import { appendFile, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -85,7 +85,7 @@ export class JsonlWriter {
   #warn(message, error) {
     const detail = error instanceof Error ? error.message : String(error)
     try {
-      this.#logger?.warn?.(`[web-search-logger] ${message}: ${detail}`)
+      this.#logger?.warn?.(`[web-search-insights] ${message}: ${detail}`)
     } catch {
       /* logger is best-effort */
     }

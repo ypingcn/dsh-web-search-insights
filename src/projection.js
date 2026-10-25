@@ -11,12 +11,12 @@
  * The fold also keeps every returned source per turn, so the panel can show
  * "all returned sources + whether each was cited".
  *
- * @module dsh-web-search-logger/projection
+ * @module dsh-web-search-insights/projection
  */
 import { displayUrl, extractUrls, normalizeUrl, readSources } from './url-utils.js'
 
 /** Projection key shared with the client bundle. */
-export const KEY = 'webSearchStats'
+export const KEY = 'webSearchInsights'
 
 /** Wire format version; bump only for incompatible client changes. */
 export const WIRE_VERSION = 1
@@ -33,10 +33,10 @@ const MAX_TEXT = 64 * 1024
 const objectSchema = {
   parse(value) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-      throw new TypeError('web-search stats: expected a plain object')
+      throw new TypeError('web-search insights: expected a plain object')
     }
     if (value.v !== WIRE_VERSION) {
-      throw new TypeError(`web-search stats: unsupported version ${String(value.v)}`)
+      throw new TypeError(`web-search insights: unsupported version ${String(value.v)}`)
     }
     return value
   },
@@ -459,7 +459,7 @@ function view(state) {
 }
 
 /** Registered projection definition. */
-export const webSearchStatsDefinition = {
+export const webSearchInsightsDefinition = {
   key: KEY,
   stateVersion: 2,
   stateSchema: objectSchema,
