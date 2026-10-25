@@ -21,6 +21,7 @@ dsh-web-search-insights/
 │   ├── projection.js     # 会话统计投影（本轮/会话引用与来源）
 │   └── index.d.ts        # 类型声明
 ├── lib/client.js         # 浏览器端：回答末尾入口 + 右侧栏面板
+├── locale/               # 插件管理页展示名：en/zh 的 meta.title 与 meta.description
 ├── test/                 # 投影、URL、客户端契约、JSONL 测试
 └── README.md
 ```
@@ -31,6 +32,7 @@ dsh-web-search-insights/
 - `writer.js` 不关心记录内容，只负责串行追加、建目录、吞掉 I/O 错误；
 - `projection.js` 把持久会话事件折叠成界面统计，纯同步、可回放；
 - `lib/client.js` 只负责界面，不参与日志与统计计算；
+- `locale/` 只声明插件管理页的展示名与一句话简介，不参与运行时逻辑；缺失时退回 `package.json` 的 `name` 与 `description`，且只在以包名（而非绝对路径）加载时生效；
 - `index.js` 把它们接起来，并且**不改变工具结果**；
 - `config.js` 是唯一读取配置的地方。
 

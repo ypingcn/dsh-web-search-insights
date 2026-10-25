@@ -13,13 +13,15 @@
     "./client": {
       "default": "./lib/client.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "src",
     "lib/client.js",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "locale/*.json"
   ],
   "scripts": {
     "test": "node test/url-utils.test.mjs && node test/projection.test.mjs && node test/client.test.mjs && node test/unit.mjs",
