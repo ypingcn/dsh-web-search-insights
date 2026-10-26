@@ -25,10 +25,8 @@ export interface WebSearchLogRecord {
   sources?: Array<{
     url: string
     title?: string
-    snippet?: string
     publishedAt?: string
   }>
-  answer?: string
   error?: {
     message: string
     name?: string
@@ -40,10 +38,7 @@ export interface Config {
   enabled?: boolean
   file?: string
   tools?: string[]
-  includeSnippet?: boolean
-  includeAnswer?: boolean
   recordErrors?: boolean
-  console?: boolean
 }
 
 export declare function apply(ctx: Context, config?: Config): () => Promise<void>

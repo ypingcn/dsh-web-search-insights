@@ -7,8 +7,8 @@
  *    the search keywords plus the returned URLs and titles.
  * 2. Session statistics: the `webSearchInsights` projection folds durable
  *    session events into per-turn citation/source counters for the client.
- * 3. UI: the answer-tail citation entry and the right-sidebar search panel
- *    (browser half in `lib/client.js`).
+ * 3. UI: the answer-tail citation entry, the right-sidebar search panel, and
+ *    the plugin page's configuration card (browser half in `lib/client.js`).
  *
  * Hook: the tool registry's `tools/result` emit, which receives the settled
  * execution and the canonical `web_search` value:
@@ -20,7 +20,7 @@
  *
  * @module dsh-web-search-insights
  */
-import { Config, normalizeConfig } from './config.js'
+import { Config, snapshotConfig } from './config.js'
 import { webSearchInsightsDefinition } from './projection.js'
 import { buildRecord } from './record.js'
 import { JsonlWriter } from './writer.js'
@@ -44,15 +44,52 @@ export function apply(ctx, config) {
   if (ctx === undefined || ctx === null || typeof ctx.on !== 'function') {
     throw new TypeError('web-search-insights: requires a Cordis context')
   }
-  const options = normalizeConfig(config)
-  const writer = new JsonlWriter(options.file, ctx.logger)
+  // Everything the plugin owns is re-read from this snapshot; settings writes
+  // replace volatile config values in place and emit `loader/volatile-update`.
+  let options = snapshotConfig(config)
+  let writer = new JsonlWriter(options.file, ctx.logger)
+  /** @type {any} */
+  let projection
 
   // Feed the client-side statistics panel. `ctx.inject` keeps the JSONL log
-  // working in profiles that do not compose the projection service.
-  if (options.enabled && typeof ctx.inject === 'function') {
-    ctx.inject(['sessionProjections'], (scope) => {
-      scope.sessionProjections.register(webSearchInsightsDefinition)
+  // working in profiles that do not compose the projection service, and the
+  // fiber is disposed/recreated when the settings page toggles `enabled`.
+  const syncProjection = () => {
+    if (options.enabled && projection === undefined && typeof ctx.inject === 'function') {
+      projection = ctx.inject(['sessionProjections'], (scope) => {
+        scope.sessionProjections.register(webSearchInsightsDefinition)
+      })
+      return
+    }
+    if (!options.enabled && projection !== undefined) {
+      const previous = projection
+      projection = undefined
+      void previous.dispose()
+    }
+  }
+  syncProjection()
+
+  // The configuration page lives in the plugin manager. Suppress any future
+  // auto-generated settings page for this entry so it never appears twice.
+  if (typeof ctx.inject === 'function') {
+    ctx.inject(['settings'], (settingsScope) => {
+      settingsScope.effect(() => settingsScope.settings.configure({ auto: false }, ctx.fiber))
     })
+  }
+
+  ctx.on('loader/volatile-update', () => {
+    options = snapshotConfig(config)
+    syncProjection()
+  })
+
+  /** Point appends at the current `file`, draining the previous writer. */
+  const retired = []
+  const writerFor = (file) => {
+    if (writer.file === file) return writer
+    const previous = writer
+    writer = new JsonlWriter(file, ctx.logger)
+    retired.push(previous)
+    return writer
   }
 
   ctx.on('tools/result', (exec, result) => {
@@ -62,17 +99,7 @@ export function apply(ctx, config) {
       if (typeof exec.name !== 'string' || !options.tools.has(exec.name)) return
       const record = buildRecord(exec, result, options)
       if (record === undefined) return
-      writer.append(record)
-      if (options.console) {
-        const outcome = record.ok
-          ? `${record.sourceCount} source(s)`
-          : `failed (${record.error?.code ?? 'error'})`
-        try {
-          ctx.logger?.info?.(`[web-search-insights] ${record.queries.join(' | ')} → ${outcome}`)
-        } catch {
-          /* logger is best-effort */
-        }
-      }
+      writerFor(options.file).append(record)
     } catch (error) {
       try {
         ctx.logger?.warn?.(
@@ -84,5 +111,12 @@ export function apply(ctx, config) {
     }
   })
 
-  return () => writer.flush()
+  return async () => {
+    if (projection !== undefined) {
+      const previous = projection
+      projection = undefined
+      await previous.dispose()
+    }
+    await Promise.all([...retired.map((item) => item.flush()), writer.flush()])
+  }
 }

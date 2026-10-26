@@ -26,22 +26,21 @@ dsh plugin --profile web add link:/path/to/dsh-web-search-insights
 - id: web-search-insights
   name: dsh-web-search-insights
   config:
-    includeSnippet: true
+    file: ~/.dsh/logs/web-search-insights.jsonl
 ```
 
 web profile 默认启用 HMR，本地 link 安装后改 `src/` 会触发热重载；未生效时重启 `dsh web`。
 
 ## 配置项
 
+插件管理页打开「搜索溯源」后，详情页里会直接出现配置表单，可修改下面四项并保存；保存写入 profile 配置并即时生效（无需重启）。也可以继续手写 profile 的 `cordis.patch.yml`。
+
 | 字段 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `enabled` | boolean | `true` | 总开关 |
 | `file` | string | `~/.dsh/logs/web-search.jsonl` | 日志路径；支持 `~`，相对路径按宿主 cwd |
 | `tools` | string[] | `["web_search"]` | 要观察的工具名 |
-| `includeSnippet` | boolean | `false` | 是否写入来源摘要 |
-| `includeAnswer` | boolean | `false` | 是否附带 provider 总结 |
 | `recordErrors` | boolean | `true` | 失败是否也记录 |
-| `console` | boolean | `false` | 是否向宿主 logger 打摘要 |
 
 ## 日志格式
 

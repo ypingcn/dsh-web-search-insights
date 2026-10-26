@@ -69,9 +69,6 @@ export function buildRecord(exec, result, options) {
     /** @type {Record<string, string>} */
     const item = { url: source.url }
     if (typeof source.title === 'string' && source.title !== '') item.title = source.title
-    if (options.includeSnippet && typeof source.snippet === 'string' && source.snippet !== '') {
-      item.snippet = source.snippet
-    }
     if (typeof source.publishedAt === 'string' && source.publishedAt !== '') {
       item.publishedAt = source.publishedAt
     }
@@ -82,8 +79,5 @@ export function buildRecord(exec, result, options) {
   record.sourceCount = sources.length
   record.truncated = value?.truncated === true
   record.sources = sources
-  if (options.includeAnswer && typeof value?.content === 'string' && value.content !== '') {
-    record.answer = value.content
-  }
   return record
 }

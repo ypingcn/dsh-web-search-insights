@@ -10,6 +10,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apply, Config, name } from '../src/index.js'
+import { readConfigField, snapshotConfig } from '../src/config.js'
 
 /** Minimal Cordis context that records event handlers. */
 function createContext() {
@@ -69,10 +70,10 @@ async function readRecords(file) {
 const root = await mkdtemp(join(tmpdir(), 'dsh-web-search-insights-'))
 
 try {
-  // 1. Success: keywords, titles, URLs, session metadata; snippet opt-in.
+  // 1. Success: keywords, titles, URLs, session metadata; snippet/answer never recorded.
   const file = join(root, 'nested', 'web-search.jsonl')
   let ctx = createContext()
-  let dispose = apply(ctx, { file, includeSnippet: true })
+  let dispose = apply(ctx, { file })
   ctx.emit('tools/result', searchExec(), successResult)
   await dispose()
   let [record] = await readRecords(file)
@@ -90,25 +91,14 @@ try {
     {
       url: 'https://example.com/a',
       title: 'Example A',
-      snippet: 'Snippet A',
       publishedAt: '2026-01-02',
     },
     { url: 'https://example.com/b', title: 'Example B' },
   ])
-  assert.equal(record.answer, undefined, 'answer is opt-in')
+  assert.equal(record.answer, undefined, 'provider answer is not recorded')
   assert.match(record.ts, /^\d{4}-\d{2}-\d{2}T/)
 
-  // 2. Snippets stay off by default; answer opt-in.
-  const plain = join(root, 'plain.jsonl')
-  ctx = createContext()
-  dispose = apply(ctx, { file: plain, includeAnswer: true })
-  ctx.emit('tools/result', searchExec(), successResult)
-  await dispose()
-  ;[record] = await readRecords(plain)
-  assert.equal(record.sources[0].snippet, undefined)
-  assert.equal(record.answer, 'A short provider answer.')
-
-  // 3. Failures record their structured error.
+  // 2. Failures record their structured error.
   const errors = join(root, 'errors.jsonl')
   ctx = createContext()
   dispose = apply(ctx, { file: errors })
@@ -128,7 +118,7 @@ try {
     code: 'WEB_PROVIDER_ERROR',
   })
 
-  // 4. Ignored inputs write nothing: other tools, blank queries, disabled.
+  // 3. Ignored inputs write nothing: other tools, blank queries, disabled.
   const ignored = join(root, 'ignored.jsonl')
   ctx = createContext()
   dispose = apply(ctx, { file: ignored })
@@ -144,7 +134,7 @@ try {
   await dispose()
   await assert.rejects(() => readFile(disabledFile, 'utf8'))
 
-  // 5. A malformed result never throws into the host.
+  // 4. A malformed result never throws into the host.
   const malformed = join(root, 'malformed.jsonl')
   ctx = createContext()
   dispose = apply(ctx, { file: malformed })
@@ -156,16 +146,110 @@ try {
   assert.deepEqual(record.sources, [])
   assert.equal(record.sourceCount, 0)
 
-  // 6. Wrong config types fail loud instead of silently defaulting.
+  // 5. Wrong config types fail loud instead of silently defaulting.
   assert.throws(() => apply(createContext(), { file: 42 }), /`file` must be a non-empty string/)
   assert.throws(() => apply(createContext(), { enabled: 'yes' }), /`enabled` must be a boolean/)
 
-  // 7. Schema (when the peer resolves) supplies defaults.
+  // 6. Volatile config refs: live edits move the writer and toggle logging.
+  const liveA = join(root, 'live-a.jsonl')
+  const liveB = join(root, 'live-b.jsonl')
+  let liveEnabled = true
+  let liveFile = liveA
+  const liveConfig = {
+    enabled: { get: () => liveEnabled },
+    file: { get: () => liveFile },
+    tools: { get: () => ['web_search'] },
+    recordErrors: { get: () => true },
+  }
+  ctx = createContext()
+  dispose = apply(ctx, liveConfig)
+  ctx.emit('tools/result', searchExec(), successResult)
+  liveFile = liveB
+  ctx.emit('loader/volatile-update')
+  ctx.emit('tools/result', searchExec(), successResult)
+  liveEnabled = false
+  ctx.emit('loader/volatile-update')
+  ctx.emit('tools/result', searchExec(), successResult)
+  await dispose()
+  assert.equal((await readRecords(liveA)).length, 1, 'first write stays in A')
+  assert.equal((await readRecords(liveB)).length, 1, 'second write follows the live file')
+  assert.equal(liveEnabled, false)
+
+  // 7. Host wiring: settings policy and the projection fiber follow `enabled`.
+  let autoPolicy
+  let projections = 0
+  let projectionDisposals = 0
+  const handlers = new Map()
+  const wiringCtx = {
+    logger: { info() {}, warn() {}, error() {} },
+    fiber: {},
+    on(event, handler) {
+      handlers.set(event, handler)
+      return () => handlers.delete(event)
+    },
+    inject(services, factory) {
+      if (services.includes('settings')) {
+        factory({
+          effect: (fn) => fn(),
+          settings: {
+            configure(options) {
+              autoPolicy = options.auto
+              return () => {}
+            },
+          },
+        })
+        return { dispose() {} }
+      }
+      if (services.includes('sessionProjections')) {
+        factory({
+          sessionProjections: {
+            register() {
+              projections += 1
+            },
+          },
+        })
+        return {
+          dispose() {
+            projectionDisposals += 1
+          },
+        }
+      }
+      throw new Error(`unexpected inject: ${services.join(', ')}`)
+    },
+  }
+  let wiringEnabled = true
+  const wiringConfig = {
+    enabled: { get: () => wiringEnabled },
+    file: { get: () => join(root, 'wiring.jsonl') },
+    tools: { get: () => ['web_search'] },
+    recordErrors: { get: () => true },
+  }
+  dispose = apply(wiringCtx, wiringConfig)
+  assert.equal(autoPolicy, false, 'auto-generated settings page is suppressed')
+  assert.equal(projections, 1)
+  wiringEnabled = false
+  handlers.get('loader/volatile-update')()
+  assert.equal(projectionDisposals, 1, 'disabling disposes the projection fiber')
+  wiringEnabled = true
+  handlers.get('loader/volatile-update')()
+  assert.equal(projections, 2, 're-enabling registers the projection again')
+  await dispose()
+
+  // 8. Schema (when the peer resolves) supplies volatile defaults.
   if (Config) {
     const defaults = Config({})
-    assert.equal(defaults.enabled, true)
-    assert.equal(defaults.file, '~/.dsh/logs/web-search.jsonl')
-    assert.deepEqual(defaults.tools, ['web_search'])
+    assert.equal(readConfigField(defaults, 'enabled'), true)
+    assert.equal(readConfigField(defaults, 'file'), '~/.dsh/logs/web-search.jsonl')
+    assert.deepEqual(readConfigField(defaults, 'tools'), ['web_search'])
+    assert.equal(readConfigField(defaults, 'recordErrors'), true)
+    assert.equal(typeof defaults.enabled.get, 'function', 'settings fields stay volatile')
+    const live = snapshotConfig(defaults)
+    assert.deepEqual([...live.tools], ['web_search'])
+    assert.match(live.file, /[\\/]\.dsh[\\/]logs[\\/]web-search\.jsonl$/)
+    assert.equal(live.enabled, true)
+    assert.equal(live.recordErrors, true)
+    assert.equal('includeSnippet' in defaults, false)
+    assert.equal('includeAnswer' in defaults, false)
   } else {
     console.log('note: @deepseek-ai/schemastery unavailable; Config schema assertions skipped')
   }

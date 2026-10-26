@@ -28,19 +28,13 @@ const z = await import('@deepseek-ai/schemastery')
 /** Config schema, when `@deepseek-ai/schemastery` is resolvable. */
 export const Config = z?.object({
   /** Master switch; disable without uninstalling. */
-  enabled: z.boolean().default(true),
+  enabled: z.boolean().default(true).volatile(),
   /** JSONL destination. `~` expands; relative paths resolve from the host cwd. */
-  file: z.string().default(DEFAULT_FILE),
+  file: z.string().default(DEFAULT_FILE).volatile(),
   /** Tool names to observe; only `web_search` has this argument/result shape. */
-  tools: z.array(z.string()).default(DEFAULT_TOOLS),
-  /** Add each source's provider snippet (off by default: snippets can be long). */
-  includeSnippet: z.boolean().default(false),
-  /** Add the provider's prose answer next to the source list. */
-  includeAnswer: z.boolean().default(false),
+  tools: z.array(z.string()).default(DEFAULT_TOOLS).volatile(),
   /** Also record failed calls (`ok: false` plus the error). */
-  recordErrors: z.boolean().default(true),
-  /** Emit a one-line summary through the host logger. */
-  console: z.boolean().default(false),
+  recordErrors: z.boolean().default(true).volatile(),
 })
 
 /**
@@ -67,7 +61,7 @@ function assertConfigTypes(source) {
   if (source.enabled !== undefined && typeof source.enabled !== 'boolean') {
     throw new TypeError('web-search-insights: `enabled` must be a boolean')
   }
-  for (const field of ['includeSnippet', 'includeAnswer', 'recordErrors', 'console']) {
+  for (const field of ['recordErrors']) {
     if (source[field] !== undefined && typeof source[field] !== 'boolean') {
       throw new TypeError(`web-search-insights: \`${field}\` must be a boolean`)
     }
@@ -90,10 +84,7 @@ function assertConfigTypes(source) {
  *   enabled: boolean,
  *   file: string,
  *   tools: Set<string>,
- *   includeSnippet: boolean,
- *   includeAnswer: boolean,
  *   recordErrors: boolean,
- *   console: boolean,
  * }} normalized options.
  */
 export function normalizeConfig(config) {
@@ -108,9 +99,39 @@ export function normalizeConfig(config) {
         : DEFAULT_FILE,
     ),
     tools: new Set(tools.length > 0 ? tools : DEFAULT_TOOLS),
-    includeSnippet: source.includeSnippet === true,
-    includeAnswer: source.includeAnswer === true,
     recordErrors: source.recordErrors !== false,
-    console: source.console === true,
   }
+}
+
+/**
+ * Read one config field, unwrapping a schemastery volatile reference. The
+ * loader turns every `.volatile()` field into `{ get() }` so a settings write
+ * can replace the value without reloading the plugin.
+ *
+ * @param {unknown} config - plugin config object.
+ * @param {string} field - field name.
+ * @returns {unknown} the live value, or undefined when absent.
+ */
+export function readConfigField(config, field) {
+  if (config === null || typeof config !== 'object') return undefined
+  const value = config[field]
+  return value !== null && typeof value === 'object' && typeof value.get === 'function'
+    ? value.get()
+    : value
+}
+
+/**
+ * Snapshot the live config into the normalized shape the writer and recorder
+ * consume. Re-read this after every `loader/volatile-update` event.
+ *
+ * @param {unknown} config - plugin config object (raw or volatile).
+ * @returns {ReturnType<typeof normalizeConfig>} normalized options.
+ */
+export function snapshotConfig(config) {
+  return normalizeConfig({
+    enabled: readConfigField(config, 'enabled'),
+    file: readConfigField(config, 'file'),
+    tools: readConfigField(config, 'tools'),
+    recordErrors: readConfigField(config, 'recordErrors'),
+  })
 }

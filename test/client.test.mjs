@@ -26,6 +26,70 @@ const fakeReact = {
     return [typeof initial === 'function' ? initial() : initial, () => {}]
   },
   useEffect() {},
+  useSyncExternalStore(_subscribe, getSnapshot) {
+    return getSnapshot()
+  },
+}
+
+/** Minimal stand-in for the shared settings-form primitives. */
+class FakeSettingsFormModel {
+  constructor(scope, specs) {
+    this.scope = scope
+    this.specs = new Map(specs.map((spec) => [spec.field, spec]))
+  }
+
+  bind(read) {
+    const store = {
+      value: read(),
+      listeners: new Set(),
+    }
+    store.getSnapshot = () => store.value
+    store.subscribe = (listener) => {
+      store.listeners.add(listener)
+      return () => store.listeners.delete(listener)
+    }
+    store.set = (value) => {
+      store.value = value
+      for (const listener of store.listeners) listener()
+    }
+    return store
+  }
+
+  shell() {
+    return { available: true, writable: true, dirty: false, invalid: false, saving: false, failed: false }
+  }
+
+  field(field) {
+    const spec = this.specs.get(field)
+    const value = this.scope.getSnapshot().value?.[field]
+    return { text: spec.format(value), overridden: false, invalid: false }
+  }
+
+  actions() {
+    return { edit() {}, resetField() {}, save() {}, discard() {} }
+  }
+
+  dispose() {}
+}
+
+const fakePrimitives = {
+  SettingsFormModel: FakeSettingsFormModel,
+  SettingsForm(props) {
+    return { type: 'form', props }
+  },
+  SettingsValueField(props) {
+    return { type: 'field', props }
+  },
+  Switch(props) {
+    return { type: 'switch', props }
+  },
+  settingsTextField(field) {
+    return {
+      field,
+      format: (value) => (typeof value === 'string' ? value : ''),
+      parse: (text) => ({ kind: 'set', value: text.trim() }),
+    }
+  },
 }
 
 await import('../lib/client.js')
@@ -33,6 +97,7 @@ assert.ok(captured, 'bundle must register itself through __ModuleLoader__')
 assert.equal(captured.id, 'dsh-web-search-insights')
 const client = captured.factory((name) => {
   if (name === 'react') return fakeReact
+  if (name === '@deepseek-ai/dsh-client-ui-primitives') return fakePrimitives
   throw new Error(`unexpected client require: ${name}`)
 })
 assert.equal(client.name, 'dsh-web-search-insights')
@@ -44,9 +109,41 @@ const registrations = []
 const tabs = []
 let opened
 const dictionaries = {}
+const fakeConfigForms = {
+  get() {
+    return {
+      getSnapshot: () => ({
+        status: 'ready',
+        writable: true,
+        base: {},
+        user: undefined,
+        value: {
+          enabled: true,
+          file: '~/.dsh/logs/web-search.jsonl',
+          tools: ['web_search'],
+          recordErrors: true,
+        },
+      }),
+      subscribe() {
+        return () => {}
+      },
+    }
+  },
+  whileServed(_namespaces, register) {
+    return register(new Set(['web-search-insights']))
+  },
+}
 const fakeCtx = {
   effect(fn) {
     return fn()
+  },
+  inject(_services, factory) {
+    const child = {
+      configForms: fakeConfigForms,
+      effect: (fn) => fn(),
+    }
+    factory(child)
+    return { dispose() {} }
   },
   locale: {
     register(namespace, messages) {
@@ -132,6 +229,23 @@ const fixture = {
 }
 
 const t = fakeCtx.locale.bind('dsh-web-search-insights')
+
+const configSlot = registrations.find((entry) => entry.options.name === 'plugins.bundle.config')
+assert.ok(configSlot, 'bundle config page must be registered')
+assert.equal(configSlot.options.key, 'dsh-web-search-insights')
+assert.equal(configSlot.options.locale, 'dsh-web-search-insights')
+const configFace = configSlot.options.inject()
+const configCard = configSlot.component({ ...configFace, view: 'page', t })
+const configText = JSON.stringify(configCard)
+assert.match(configText, /插件配置/)
+assert.match(configText, /启用插件/)
+assert.match(configText, /日志文件/)
+assert.match(configText, /记录失败调用/)
+assert.match(configText, /观察工具/)
+assert.match(configText, /wsi-field-toggle/)
+assert.match(configText, /wsi-toggle-row/)
+assert.match(configText, /wsi-toggle-grid/)
+
 const entryElement = turnTail.component({
   turn: { turn: 1 },
   useProjection: (_key, selector) => selector(fixture),
