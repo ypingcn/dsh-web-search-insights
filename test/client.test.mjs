@@ -236,6 +236,12 @@ const fixture = {
 
 const t = fakeCtx.locale.bind('dsh-web-search-insights')
 
+// Every `t()` call must resolve: a missing key renders the key itself, which
+// this fallback bind makes visible below.
+for (const locale of ['zh', 'en']) {
+  assert.equal(typeof dictionaries['dsh-web-search-insights'][locale]['panel.notCited'], 'string')
+}
+
 const quickView = registrations.find((entry) => entry.options.name === 'conversation.view')
 assert.ok(quickView, 'quick-search conversation view must be registered')
 assert.equal(quickView.options.id, 'quick-search')
@@ -313,6 +319,8 @@ const entryElement = turnTail.component({
 const entryText = JSON.stringify(entryElement)
 assert.match(entryText, /本轮引用 2 个网页 · 会话累计 2 个网页 · 主动抓取 2 个网页数据/)
 assert.match(entryText, /查看/)
+assert.match(entryText, /未引用/, 'uncited icons carry a localized tooltip')
+assert.doesNotMatch(entryText, /panel\.notCited/, 'no raw i18n key leaks into the UI')
 
 const zeroFixture = {
   ...fixture,
@@ -367,6 +375,7 @@ assert.match(panelText, /搜索记录/)
 assert.match(panelText, /会话累计引用 2 个来源（共 3 次） · 返回 3 个 · 搜索 2 次 · 获取 2 个网页/)
 assert.match(panelText, /本轮回答引用 2 个来源，其中 1 个来自本轮搜索；本轮共返回 2 个来源。/)
 assert.match(panelText, /已引用/)
+assert.match(panelText, /未引用/)
 assert.match(panelText, /可能看过/)
 assert.match(panelText, /wsl-source-status/)
 assert.match(panelText, /已引用/)
