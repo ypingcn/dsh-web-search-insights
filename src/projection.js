@@ -413,6 +413,57 @@ function init(_header, inheritedEventCount) {
 
 /** Cache one wire value per state reference (stable for consumers). */
 const viewCache = new WeakMap()
+/** Cache one wire value per turn state: only the changed turn is rebuilt. */
+const turnViewCache = new WeakMap()
+/** Cache the descending turn order per `turns` object. */
+const turnKeysCache = new WeakMap()
+
+/**
+ * Project one turn into its wire shape.
+ *
+ * @param {any} turn - internal turn state.
+ * @returns {any} wire turn.
+ */
+function turnView(turn) {
+  const cached = turnViewCache.get(turn)
+  if (cached !== undefined) return cached
+
+  const value = {
+    searchCalls: turn.searchCalls,
+    returned: turn.returned,
+    cited: turn.cited,
+    local: turn.local,
+    occurrences: turn.occurrences,
+    queries: turn.queries,
+    fetchCount: turn.fetchCount ?? 0,
+    fetches: (turn.fetches ?? []).map((fetch) => ({
+      url: fetch.url,
+      ...(fetch.statusCode !== undefined ? { statusCode: fetch.statusCode } : {}),
+    })),
+    sourceCount: turn.sources.length,
+    sources: turn.sources.slice(0, MAX_SOURCES_PER_TURN).map((source) => ({
+      url: displayUrl(source.url),
+      title: source.title,
+      cited: source.cited,
+      ...(source.fetched === true ? { fetched: true } : {}),
+      ...(source.icon !== undefined ? { icon: source.icon } : {}),
+      ...(source.authority !== undefined ? { authority: source.authority } : {}),
+      ...(source.rerankScore !== undefined ? { rerankScore: source.rerankScore } : {}),
+    })),
+    ...(turn.sources.length > MAX_SOURCES_PER_TURN ? { sourcesTruncated: true } : {}),
+  }
+  turnViewCache.set(turn, value)
+  return value
+}
+
+/** Newest turn first, cached while the `turns` object is unchanged. */
+function sortedTurnKeys(turns) {
+  const cached = turnKeysCache.get(turns)
+  if (cached !== undefined) return cached
+  const keys = Object.keys(turns).sort((left, right) => Number(right) - Number(left))
+  turnKeysCache.set(turns, keys)
+  return keys
+}
 
 /**
  * Project internal state to the client-visible whole value.
@@ -424,34 +475,10 @@ function view(state) {
   const cached = viewCache.get(state)
   if (cached !== undefined) return cached
 
-  const turnKeys = Object.keys(state.turns).sort((left, right) => Number(right) - Number(left))
+  const turnKeys = sortedTurnKeys(state.turns)
   const turns = {}
   for (const key of turnKeys) {
-    const turn = state.turns[key]
-    turns[key] = {
-      searchCalls: turn.searchCalls,
-      returned: turn.returned,
-      cited: turn.cited,
-      local: turn.local,
-      occurrences: turn.occurrences,
-      queries: turn.queries,
-      fetchCount: turn.fetchCount ?? 0,
-      fetches: (turn.fetches ?? []).map((fetch) => ({
-        url: fetch.url,
-        ...(fetch.statusCode !== undefined ? { statusCode: fetch.statusCode } : {}),
-      })),
-      sourceCount: turn.sources.length,
-      sources: turn.sources.slice(0, MAX_SOURCES_PER_TURN).map((source) => ({
-        url: displayUrl(source.url),
-        title: source.title,
-        cited: source.cited,
-        ...(source.fetched === true ? { fetched: true } : {}),
-        ...(source.icon !== undefined ? { icon: source.icon } : {}),
-        ...(source.authority !== undefined ? { authority: source.authority } : {}),
-        ...(source.rerankScore !== undefined ? { rerankScore: source.rerankScore } : {}),
-      })),
-      ...(turn.sources.length > MAX_SOURCES_PER_TURN ? { sourcesTruncated: true } : {}),
-    }
+    turns[key] = turnView(state.turns[key])
   }
 
   const value = {

@@ -218,6 +218,20 @@ assert.equal(bigWire.turns['9'].sourceCount, 4100)
 assert.equal(bigWire.turns['9'].sources.length, 50, 'the wire view still caps per-turn sources')
 assert.equal(bigWire.turns['9'].sourcesTruncated, true)
 
+// 10. Unchanged turns reuse their wire object across views.
+let cachedState = fold([
+  call(50, 10, 'cache', 'web_search', ['cache']),
+  result(51, 10, 'cache', [['https://cache.test/x', 'C']]),
+  answer(52, 10, '[C](https://cache.test/x)'),
+  end(53, 10),
+])
+const beforeView = definition.wire.view(cachedState)
+cachedState = definition.apply(cachedState, answer(54, 11, 'Narration for a turn that has not ended.'))
+const afterView = definition.wire.view(cachedState)
+assert.notEqual(afterView, beforeView)
+assert.equal(afterView.turns['10'], beforeView.turns['10'], 'unchanged turn reuses its wire object')
+assert.deepEqual(afterView.turns['10'], beforeView.turns['10'])
+
 // 11. Text before a tool call is narration, not the final answer: a turn that
 //     ends without a later answer text must not count the narration's links.
 const narrated = fold([
