@@ -44,19 +44,24 @@ assert.equal(
 
 let route
 let searchRequest
+let searchSignal
 const fakeCtx = {
   inject(services, factory) {
     assert.deepEqual(services, ['web', 'webServer'])
     factory({
       effect: (fn) => fn(),
       web: {
-        async search(request) {
+        async search(request, signal) {
           searchRequest = request
+          searchSignal = signal
           return {
             sources: [
               { url: 'https://a.test/x', title: 'A', snippet: 'snippet A', publishedAt: '2026-01-02' },
               { url: 'https://b.test/y', extra: 'dropped' },
             ],
+            // The view never renders the provider answer, so it must not be
+            // forwarded; the payload assertion below locks that in.
+            content: 'provider answer',
             truncated: true,
           }
         },
@@ -113,6 +118,15 @@ function exchange(body, overrides = {}) {
     },
   })
   assert.deepEqual(searchRequest, { query: 'hello', maxResults: 5 })
+  assert.ok(searchSignal instanceof AbortSignal, 'the seam receives a cancellation signal')
+}
+
+// A response that already went away must not be written to.
+{
+  const { request, response } = exchange({ query: 'hello' })
+  response.writableEnded = true
+  await route.handler(request, response)
+  assert.equal(response.payload, '')
 }
 
 {
@@ -165,6 +179,70 @@ function exchange(body, overrides = {}) {
     ok: false,
     error: { code: 'WEB_PROVIDER_ERROR', message: 'provider exploded' },
   })
+}
+
+// A provider that never settles must answer 504 instead of hanging the route.
+{
+  const hanging = {
+    inject(_services, factory) {
+      factory({
+        effect: (fn) => fn(),
+        web: { search: () => new Promise(() => {}) },
+        webServer: {
+          register(definition) {
+            route = definition
+            return () => {}
+          },
+        },
+      })
+    },
+  }
+  installQuickSearchRoute(hanging, { timeoutMs: 10 })
+  const { request, response } = exchange({ query: 'slow' })
+  await route.handler(request, response)
+  assert.equal(response.status, 504)
+  assert.deepEqual(JSON.parse(response.payload), {
+    ok: false,
+    error: { code: 'QUICK_SEARCH_TIMEOUT', message: 'search timed out after 10ms' },
+  })
+}
+
+// Requests above the concurrency cap are rejected without touching the provider.
+{
+  let release
+  const blocking = new Promise((resolve) => {
+    release = resolve
+  })
+  const gated = {
+    inject(_services, factory) {
+      factory({
+        effect: (fn) => fn(),
+        web: {
+          async search() {
+            await blocking
+            return { sources: [], truncated: false }
+          },
+        },
+        webServer: {
+          register(definition) {
+            route = definition
+            return () => {}
+          },
+        },
+      })
+    },
+  }
+  installQuickSearchRoute(gated, { maxConcurrent: 1, timeoutMs: 200 })
+  const first = exchange({ query: 'one' })
+  const second = exchange({ query: 'two' })
+  const firstRun = route.handler(first.request, first.response)
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  await route.handler(second.request, second.response)
+  assert.equal(second.response.status, 429)
+  assert.equal(JSON.parse(second.response.payload).error.code, 'TOO_MANY_REQUESTS')
+  release()
+  await firstRun
+  assert.equal(first.response.status, 200)
 }
 
 console.log('quick-search tests passed')

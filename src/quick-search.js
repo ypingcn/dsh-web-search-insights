@@ -21,6 +21,12 @@ export const QUICK_SEARCH_LIMITS = [5, 10, 15, 20]
 /** Default result limit. */
 export const QUICK_SEARCH_DEFAULT_LIMIT = 10
 
+/** Longest a single provider call may run before the route answers 504. */
+export const QUICK_SEARCH_TIMEOUT_MS = 15_000
+
+/** Concurrent provider calls allowed per host process. */
+export const QUICK_SEARCH_MAX_CONCURRENT = 4
+
 /** Longest accepted keyword, in characters. */
 const QUERY_MAX_CHARS = 500
 
@@ -84,8 +90,14 @@ async function readJsonBody(request) {
   return text === '' ? {} : JSON.parse(text)
 }
 
-/** Write one JSON response. */
+/** True once the peer has gone away or the response was already sent. */
+function isClosed(response) {
+  return response?.writableEnded === true || response?.destroyed === true
+}
+
+/** Write one JSON response, unless the socket is already gone. */
 function sendJson(response, status, payload) {
+  if (isClosed(response)) return
   const body = JSON.stringify(payload)
   response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
@@ -120,8 +132,16 @@ export function readQuickSearchRequest(body) {
   return { query, limit }
 }
 
-/** Answer one quick-search request through the DSH web seam. */
-async function handleQuickSearch(web, request, response) {
+/**
+ * Answer one quick-search request through the DSH web seam.
+ *
+ * @param {any} web - the host's `web` service.
+ * @param {any} request - incoming request.
+ * @param {any} response - outgoing response.
+ * @param {{ timeoutMs: number, maxConcurrent: number, gate: { active: number } }} limits -
+ *   per-route timeout, concurrency cap, and its shared counter.
+ */
+async function handleQuickSearch(web, request, response, limits) {
   if (request.method !== 'POST') {
     response.writeHead(405, { allow: 'POST' })
     response.end()
@@ -146,24 +166,70 @@ async function handleQuickSearch(web, request, response) {
     sendJson(response, 400, { ok: false, error: { code: 'BAD_REQUEST', message: parsed.error } })
     return
   }
+  if (limits.gate.active >= limits.maxConcurrent) {
+    sendJson(response, 429, {
+      ok: false,
+      error: {
+        code: 'TOO_MANY_REQUESTS',
+        message: `at most ${limits.maxConcurrent} concurrent searches`,
+      },
+    })
+    return
+  }
+  limits.gate.active += 1
+
+  const controller = new AbortController()
+  let timedOut = false
+  let timer
+  // A prematurely closed response means nobody is listening any more; abort the
+  // provider call instead of letting it finish into a dead socket.
+  const onClose = () => {
+    if (response?.writableEnded !== true) controller.abort()
+  }
+  if (typeof response?.on === 'function') response.on('close', onClose)
+
   try {
-    const result = await web.search({ query: parsed.query, maxResults: parsed.limit })
+    const timeout = new Promise((_resolve, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true
+        controller.abort()
+        const error = new Error(`search timed out after ${limits.timeoutMs}ms`)
+        error.code = 'QUICK_SEARCH_TIMEOUT'
+        reject(error)
+      }, limits.timeoutMs)
+    })
+    // The seam takes the cancellation signal as its second argument. Attach a
+    // no-op catch so a provider rejecting after the timeout stays handled.
+    const search = Promise.resolve().then(() =>
+      web.search({ query: parsed.query, maxResults: parsed.limit }, controller.signal),
+    )
+    search.catch(() => {})
+    const result = await Promise.race([search, timeout])
+    // The view renders sources only; the provider's synthesized `content` is
+    // deliberately not forwarded to keep the response small.
     sendJson(response, 200, {
       ok: true,
       value: {
         sources: Array.isArray(result?.sources) ? result.sources.map(projectSource) : [],
         truncated: result?.truncated === true,
-        ...(typeof result?.content === 'string' && result.content !== '' ? { content: result.content } : {}),
       },
     })
   } catch (error) {
-    sendJson(response, 200, {
+    sendJson(response, timedOut ? 504 : 200, {
       ok: false,
       error: {
-        code: typeof error?.code === 'string' ? error.code : 'WEB_PROVIDER_ERROR',
+        code: timedOut
+          ? 'QUICK_SEARCH_TIMEOUT'
+          : typeof error?.code === 'string'
+            ? error.code
+            : 'WEB_PROVIDER_ERROR',
         message: error instanceof Error ? error.message : String(error),
       },
     })
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+    if (typeof response?.off === 'function') response.off('close', onClose)
+    limits.gate.active -= 1
   }
 }
 
@@ -172,16 +238,28 @@ async function handleQuickSearch(web, request, response) {
  * the web service. Both are optional so the plugin still loads elsewhere.
  *
  * @param {any} ctx - host plugin context.
+ * @param {{ timeoutMs?: number, maxConcurrent?: number }} [options] - safety
+ *   limits; mainly overridden by tests.
  */
-export function installQuickSearchRoute(ctx) {
+export function installQuickSearchRoute(ctx, options = {}) {
   if (typeof ctx?.inject !== 'function') return
+  const timeoutMs =
+    Number.isFinite(options?.timeoutMs) && options.timeoutMs > 0
+      ? options.timeoutMs
+      : QUICK_SEARCH_TIMEOUT_MS
+  const maxConcurrent =
+    Number.isInteger(options?.maxConcurrent) && options.maxConcurrent > 0
+      ? options.maxConcurrent
+      : QUICK_SEARCH_MAX_CONCURRENT
+  const gate = { active: 0 }
   ctx.inject(['web', 'webServer'], (scope) => {
     scope.effect(
       () =>
         scope.webServer.register({
           kind: 'exact',
           path: QUICK_SEARCH_PATH,
-          handler: (request, response) => handleQuickSearch(scope.web, request, response),
+          handler: (request, response) =>
+            handleQuickSearch(scope.web, request, response, { timeoutMs, maxConcurrent, gate }),
         }),
       'web-search-insights: quick search route',
     )

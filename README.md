@@ -52,7 +52,8 @@ web profile 默认启用 HMR，本地 link 安装后改 `src/` 会触发热重�
 - 手动查询历史是全局的，保存在浏览器 localStorage；
 - 页面宽度复用对话主栏的 `--dsh-chat-content-width`，拖动对话两侧的宽度手柄会同步调整搜索页宽度；
 - 当前查询和结果按会话保留在当前浏览器会话的内存里，切换「对话 / 轨迹」再回来不会丢失；刷新页面后重置；
-- 该功能依赖宿主提供同源 HTTP 路由 `/api/dsh-web-search-insights/quick-search`，仅本机同源请求可用。
+- 该功能依赖宿主提供同源 HTTP 路由 `/api/dsh-web-search-insights/quick-search`，仅本机同源请求可用；
+- 单次查询最多 15 秒，超时返回 504；同一宿主最多 4 个并发查询，超出返回 429。
 
 ## 日志格式
 
