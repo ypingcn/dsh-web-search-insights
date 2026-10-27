@@ -4,7 +4,8 @@
  *   node test/url-utils.test.mjs
  */
 import assert from 'node:assert/strict'
-import { extractUrls, normalizeUrl } from '../src/url-utils.js'
+import { buildRecord } from '../src/record.js'
+import { extractUrls, normalizeSources, normalizeUrl, readSources } from '../src/url-utils.js'
 
 // Fragment and tracking parameters must not change the identity.
 assert.equal(
@@ -29,6 +30,35 @@ assert.deepEqual(extractUrls(text), [
   'https://a.test/x',
   'https://b.test/y',
   'https://c.test/z',
+])
+
+// One payload, two consumers: the audit log and the projection must agree on
+// URL identity (dedupe plus fragment/tracking normalization).
+const sourceList = [
+  { url: 'https://www.Example.com/a/?utm_source=x#frag', title: 'A', publishedAt: '2026-01-02' },
+  { url: 'https://example.com/a?utm_source=y', title: 'duplicate of A' },
+  { url: '', title: 'dropped' },
+  { url: 'https://b.test/y', title: 'B', site_icon: 'https://icons.test/b.png', rerank_score: 0.5 },
+]
+const normalized = normalizeSources(sourceList)
+assert.deepEqual(normalized.map((item) => item.key), ['https://example.com/a', 'https://b.test/y'])
+assert.deepEqual(
+  readSources({ sources: sourceList }).map((item) => item.key),
+  normalized.map((item) => item.key),
+)
+const record = buildRecord(
+  { name: 'web_search', callId: 'c1', rootCallId: 'c1', arguments: { queries: ['q'] } },
+  { isError: false, value: { sources: sourceList, truncated: false } },
+  { recordErrors: true },
+)
+assert.deepEqual(
+  record.sources.map((item) => normalizeUrl(item.url)),
+  normalized.map((item) => item.key),
+  'the log and the projection resolve the same source identity',
+)
+assert.deepEqual(record.sources, [
+  { url: 'https://www.Example.com/a/?utm_source=x', title: 'A', publishedAt: '2026-01-02' },
+  { url: 'https://b.test/y', title: 'B' },
 ])
 
 console.log('url-utils tests passed')

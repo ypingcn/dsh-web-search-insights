@@ -169,25 +169,31 @@ function readRerankScore(item) {
 }
 
 /**
- * Read the registry-style source list from `web_search` presentation meta.
+ * Normalize one provider source list into deduplicated, matchable entries.
+ *
+ * Both consumers must agree on URL identity, so the JSONL recorder and the
+ * session projection share this function: the recorder keeps a compact field
+ * subset, the projection keeps icons/scores as well. Entries without a usable
+ * http(s) URL are dropped, and later duplicates of the same normalized key are
+ * ignored.
  *
  * The canonical `WebSource` only promises url/title/snippet/publishedAt, but a
  * custom search provider may attach site_icon/authority/rerank_score. Those are
  * preserved when present and ignored when absent.
  *
- * @param {unknown} meta - persisted `tool/result` meta.
+ * @param {unknown} list - raw provider sources.
  * @returns {Array<{
  *   key: string,
  *   url: string,
  *   title: string,
+ *   publishedAt?: string,
  *   icon?: string,
  *   authority?: string,
  *   rerankScore?: number,
  * }>} deduplicated sources.
  */
-export function readSources(meta) {
-  if (meta === null || typeof meta !== 'object') return []
-  const list = Array.isArray(meta.sources) ? meta.sources : []
+export function normalizeSources(list) {
+  if (!Array.isArray(list)) return []
   /** @type {Array<any>} */
   const sources = []
   const seen = new Set()
@@ -200,14 +206,27 @@ export function readSources(meta) {
     const icon = readIcon(item.site_icon ?? item.siteIcon ?? item.icon)
     const authority = typeof item.authority === 'string' ? item.authority.slice(0, 200) : ''
     const rerankScore = readRerankScore(item)
+    const publishedAt = typeof item.publishedAt === 'string' ? item.publishedAt : ''
     sources.push({
       key,
       url: displayUrl(rawUrl),
       title: typeof item.title === 'string' ? item.title : '',
+      ...(publishedAt !== '' ? { publishedAt } : {}),
       ...(icon !== '' ? { icon } : {}),
       ...(authority !== '' ? { authority } : {}),
       ...(rerankScore !== undefined ? { rerankScore } : {}),
     })
   }
   return sources
+}
+
+/**
+ * Read the registry-style source list from `web_search` presentation meta.
+ *
+ * @param {unknown} meta - persisted `tool/result` meta.
+ * @returns {ReturnType<typeof normalizeSources>} deduplicated sources.
+ */
+export function readSources(meta) {
+  if (meta === null || typeof meta !== 'object') return []
+  return normalizeSources(meta.sources)
 }

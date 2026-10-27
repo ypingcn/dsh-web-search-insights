@@ -6,6 +6,7 @@
  *
  * @module dsh-web-search-insights/record
  */
+import { normalizeSources } from './url-utils.js'
 
 /**
  * Keep only the string queries the model actually sent.
@@ -61,19 +62,13 @@ export function buildRecord(exec, result, options) {
   }
 
   const value = result?.value
-  /** @type {Array<Record<string, string>>} */
-  const sources = []
-  for (const source of Array.isArray(value?.sources) ? value.sources : []) {
-    if (source === null || typeof source !== 'object') continue
-    if (typeof source.url !== 'string' || source.url === '') continue
-    /** @type {Record<string, string>} */
-    const item = { url: source.url }
-    if (typeof source.title === 'string' && source.title !== '') item.title = source.title
-    if (typeof source.publishedAt === 'string' && source.publishedAt !== '') {
-      item.publishedAt = source.publishedAt
-    }
-    sources.push(item)
-  }
+  // Same normalization as the projection, so a URL matches between the log
+  // and the statistics panel; the log keeps only the compact field subset.
+  const sources = normalizeSources(value?.sources).map((source) => ({
+    url: source.url,
+    ...(source.title !== '' ? { title: source.title } : {}),
+    ...(source.publishedAt !== undefined ? { publishedAt: source.publishedAt } : {}),
+  }))
 
   record.ok = true
   record.sourceCount = sources.length
