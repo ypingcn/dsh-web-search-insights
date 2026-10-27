@@ -6,7 +6,7 @@
  *   node test/unit.mjs
  */
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apply, Config, name } from '../src/index.js'
@@ -97,6 +97,9 @@ try {
   ])
   assert.equal(record.answer, undefined, 'provider answer is not recorded')
   assert.match(record.ts, /^\d{4}-\d{2}-\d{2}T/)
+  if (process.platform !== 'win32') {
+    assert.equal((await stat(file)).mode & 0o777, 0o600, 'a new log file is owner-only')
+  }
 
   // 2. Failures record their structured error.
   const errors = join(root, 'errors.jsonl')

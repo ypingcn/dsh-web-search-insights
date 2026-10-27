@@ -53,7 +53,9 @@ export class JsonlWriter {
     this.#queue = this.#queue
       .then(async () => {
         await this.#ensureDirectory()
-        await appendFile(this.#file, line, 'utf8')
+        // `mode` only applies on creation, so an existing log keeps its own
+        // permissions while a new one is never group/world readable.
+        await appendFile(this.#file, line, { encoding: 'utf8', mode: 0o600 })
       })
       .catch((error) => {
         this.#warn(`append to ${this.#file} failed`, error)
@@ -68,7 +70,7 @@ export class JsonlWriter {
   /** Create the log directory once; a failure resets the memo for a retry. */
   #ensureDirectory() {
     if (this.#directoryReady === undefined) {
-      this.#directoryReady = mkdir(dirname(this.#file), { recursive: true }).catch((error) => {
+      this.#directoryReady = mkdir(dirname(this.#file), { recursive: true, mode: 0o700 }).catch((error) => {
         this.#directoryReady = undefined
         throw error
       })
