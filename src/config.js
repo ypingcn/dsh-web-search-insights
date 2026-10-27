@@ -35,6 +35,8 @@ export const Config = z?.object({
   tools: z.array(z.string()).default(DEFAULT_TOOLS).volatile(),
   /** Also record failed calls (`ok: false` plus the error). */
   recordErrors: z.boolean().default(true).volatile(),
+  /** Show the "quick search" conversation view. Browser-side gate. */
+  quickSearchView: z.boolean().default(true).volatile(),
 })
 
 /**
@@ -61,7 +63,7 @@ function assertConfigTypes(source) {
   if (source.enabled !== undefined && typeof source.enabled !== 'boolean') {
     throw new TypeError('web-search-insights: `enabled` must be a boolean')
   }
-  for (const field of ['recordErrors']) {
+  for (const field of ['recordErrors', 'quickSearchView']) {
     if (source[field] !== undefined && typeof source[field] !== 'boolean') {
       throw new TypeError(`web-search-insights: \`${field}\` must be a boolean`)
     }
@@ -85,6 +87,7 @@ function assertConfigTypes(source) {
  *   file: string,
  *   tools: Set<string>,
  *   recordErrors: boolean,
+ *   quickSearchView: boolean,
  * }} normalized options.
  */
 export function normalizeConfig(config) {
@@ -100,6 +103,7 @@ export function normalizeConfig(config) {
     ),
     tools: new Set(tools.length > 0 ? tools : DEFAULT_TOOLS),
     recordErrors: source.recordErrors !== false,
+    quickSearchView: source.quickSearchView !== false,
   }
 }
 
@@ -133,5 +137,6 @@ export function snapshotConfig(config) {
     file: readConfigField(config, 'file'),
     tools: readConfigField(config, 'tools'),
     recordErrors: readConfigField(config, 'recordErrors'),
+    quickSearchView: readConfigField(config, 'quickSearchView'),
   })
 }

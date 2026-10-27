@@ -152,6 +152,10 @@ try {
   // 5. Wrong config types fail loud instead of silently defaulting.
   assert.throws(() => apply(createContext(), { file: 42 }), /`file` must be a non-empty string/)
   assert.throws(() => apply(createContext(), { enabled: 'yes' }), /`enabled` must be a boolean/)
+  assert.throws(
+    () => apply(createContext(), { quickSearchView: 'yes' }),
+    /`quickSearchView` must be a boolean/,
+  )
 
   // 6. Volatile config refs: live edits move the writer and toggle logging.
   const liveA = join(root, 'live-a.jsonl')
@@ -246,12 +250,14 @@ try {
     assert.equal(readConfigField(defaults, 'file'), '~/.dsh/logs/web-search.jsonl')
     assert.deepEqual(readConfigField(defaults, 'tools'), ['web_search'])
     assert.equal(readConfigField(defaults, 'recordErrors'), true)
+    assert.equal(readConfigField(defaults, 'quickSearchView'), true)
     assert.equal(typeof defaults.enabled.get, 'function', 'settings fields stay volatile')
     const live = snapshotConfig(defaults)
     assert.deepEqual([...live.tools], ['web_search'])
     assert.match(live.file, /[\\/]\.dsh[\\/]logs[\\/]web-search\.jsonl$/)
     assert.equal(live.enabled, true)
     assert.equal(live.recordErrors, true)
+    assert.equal(live.quickSearchView, true)
     assert.equal('includeSnippet' in defaults, false)
     assert.equal('includeAnswer' in defaults, false)
   } else {

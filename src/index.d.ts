@@ -39,6 +39,8 @@ export interface Config {
   file?: string
   tools?: string[]
   recordErrors?: boolean
+  /** Show the "quick search" conversation view (browser-side switch). */
+  quickSearchView?: boolean
 }
 
 export declare function apply(ctx: Context, config?: Config): () => Promise<void>

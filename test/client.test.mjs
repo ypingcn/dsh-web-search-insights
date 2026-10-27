@@ -17,6 +17,7 @@ globalThis.window = {
 }
 
 const fakeReact = {
+  Fragment: Symbol('Fragment'),
   createElement(type, props, ...children) {
     const nextProps = { ...(props ?? {}), children: children.flat(Infinity) }
     if (typeof type === 'function') return type(nextProps)
@@ -128,6 +129,7 @@ const fakeConfigForms = {
           file: '~/.dsh/logs/web-search.jsonl',
           tools: ['web_search'],
           recordErrors: true,
+          quickSearchView: true,
         },
       }),
       subscribe() {
@@ -305,7 +307,13 @@ assert.match(configText, /插件配置/)
 assert.match(configText, /启用插件/)
 assert.match(configText, /日志文件/)
 assert.match(configText, /记录失败调用/)
+assert.match(configText, /快捷搜索页面/)
 assert.match(configText, /观察工具/)
+assert.equal(
+  (configText.match(/"className":"wsi-field wsi-field-toggle"/g) ?? []).length,
+  3,
+  'all three toggles share one row',
+)
 assert.match(configText, /wsi-field-toggle/)
 assert.match(configText, /wsi-toggle-row/)
 assert.match(configText, /wsi-toggle-grid/)
@@ -419,5 +427,84 @@ const emptyPanel = pane.component({
   t,
 })
 assert.match(JSON.stringify(emptyPanel), /统计未启用/)
+
+// Session mode pages long histories instead of rendering every turn.
+const manyTurns = { v: 1, session: fixture.session, turns: {} }
+for (let index = 1; index <= 30; index += 1) {
+  manyTurns.turns[index] = {
+    ...fixture.turns[1],
+    queries: [`q${index}`],
+    sources: fixture.turns[1].sources.map((source) => ({ ...source })),
+  }
+}
+const manyPanel = pane.component({
+  useProjection: () => manyTurns,
+  useTabInfo: () => ({ tab: { navigation: { params: undefined, revision: 0 } } }),
+  t,
+})
+const manyText = JSON.stringify(manyPanel)
+assert.equal((manyText.match(/"className":"wsl-card"/g) ?? []).length, 20, 'session mode renders one page')
+assert.match(manyText, /加载更多（剩余 10 轮）/)
+
+// The quick-search view follows the `quickSearchView` switch.
+{
+  const offRegistrations = []
+  const offCtx = {
+    effect(fn) {
+      return fn()
+    },
+    inject(_services, factory) {
+      factory({
+        configForms: {
+          get() {
+            return {
+              getSnapshot: () => ({
+                status: 'ready',
+                writable: true,
+                revision: 1,
+                base: {},
+                user: undefined,
+                value: { enabled: true, quickSearchView: false },
+              }),
+              subscribe() {
+                return () => {}
+              },
+            }
+          },
+          whileServed(_namespaces, register) {
+            return register(new Set(['web-search-insights']))
+          },
+        },
+        effect: (fn) => fn(),
+      })
+      return { dispose() {} }
+    },
+    locale: {
+      register() {
+        return () => {}
+      },
+      bind() {
+        return (key) => key
+      },
+    },
+    sidebarRightTabs: { register() { return () => {} } },
+    sidebarRight: { openTab() {} },
+    slots: {
+      inject(_name, factory) {
+        return factory()
+      },
+      register(options, component) {
+        offRegistrations.push({ options, component })
+        return () => {}
+      },
+    },
+  }
+  client.apply(offCtx)
+  assert.equal(
+    offRegistrations.some((entry) => entry.options.name === 'conversation.view'),
+    false,
+    'disabling quickSearchView removes the view',
+  )
+}
 
 console.log('client tests passed')

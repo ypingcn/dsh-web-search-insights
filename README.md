@@ -33,7 +33,7 @@ web profile 默认启用 HMR，本地 link 安装后改 `src/` 会触发热重�
 
 ## 配置项
 
-插件管理页打开「搜索溯源」后，详情页里会直接出现配置表单，可修改下面四项并保存；保存写入 profile 配置并即时生效（无需重启）。也可以继续手写 profile 的 `cordis.patch.yml`。
+插件管理页打开「搜索溯源」后，详情页里会直接出现配置表单，可修改下面五项并保存；保存写入 profile 配置并即时生效（无需重启）。也可以继续手写 profile 的 `cordis.patch.yml`。
 
 | 字段 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -41,6 +41,7 @@ web profile 默认启用 HMR，本地 link 安装后改 `src/` 会触发热重�
 | `file` | string | `~/.dsh/logs/web-search.jsonl` | 日志路径；支持 `~`，相对路径按宿主 cwd |
 | `tools` | string[] | `["web_search"]` | 要观察的工具名 |
 | `recordErrors` | boolean | `true` | 失败是否也记录 |
+| `quickSearchView` | boolean | `true` | 是否显示会话顶部的「快速搜索」视图；关闭后立即隐藏 |
 
 ## 快速搜索
 
