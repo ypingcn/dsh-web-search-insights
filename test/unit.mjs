@@ -188,6 +188,7 @@ try {
       return () => handlers.delete(event)
     },
     inject(services, factory) {
+      if (services.includes('webServer')) return { dispose() {} }
       if (services.includes('settings')) {
         factory({
           effect: (fn) => fn(),

@@ -21,6 +21,7 @@
  * @module dsh-web-search-insights
  */
 import { Config, snapshotConfig } from './config.js'
+import { installQuickSearchRoute } from './quick-search.js'
 import { webSearchInsightsDefinition } from './projection.js'
 import { buildRecord } from './record.js'
 import { JsonlWriter } from './writer.js'
@@ -29,6 +30,7 @@ export { Config }
 export { webSearchInsightsDefinition } from './projection.js'
 export { buildRecord, normalizeQueries } from './record.js'
 export { JsonlWriter } from './writer.js'
+export { installQuickSearchRoute, QUICK_SEARCH_PATH } from './quick-search.js'
 
 /** Cordis plugin name; also the default loader row id. */
 export const name = 'web-search-insights'
@@ -68,6 +70,7 @@ export function apply(ctx, config) {
     }
   }
   syncProjection()
+  installQuickSearchRoute(ctx)
 
   // The configuration page lives in the plugin manager. Suppress any future
   // auto-generated settings page for this entry so it never appears twice.

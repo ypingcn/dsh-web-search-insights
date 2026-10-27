@@ -26,6 +26,9 @@ const fakeReact = {
     return [typeof initial === 'function' ? initial() : initial, () => {}]
   },
   useEffect() {},
+  useRef(initial) {
+    return { current: initial }
+  },
   useSyncExternalStore(_subscribe, getSnapshot) {
     return getSnapshot()
   },
@@ -82,6 +85,9 @@ const fakePrimitives = {
   },
   Switch(props) {
     return { type: 'switch', props }
+  },
+  Tooltip(props) {
+    return { type: 'tooltip', props }
   },
   settingsTextField(field) {
     return {
@@ -229,6 +235,58 @@ const fixture = {
 }
 
 const t = fakeCtx.locale.bind('dsh-web-search-insights')
+
+const quickView = registrations.find((entry) => entry.options.name === 'conversation.view')
+assert.ok(quickView, 'quick-search conversation view must be registered')
+assert.equal(quickView.options.id, 'quick-search')
+assert.equal(quickView.options.order, 20)
+assert.equal(quickView.options.label(), '快速搜索')
+const quickElement = quickView.component({ t, sessionId: 'session-1' })
+const quickText = JSON.stringify(quickElement)
+assert.match(quickText, /快速搜索/)
+assert.match(quickText, /输入一个关键词/)
+assert.doesNotMatch(quickText, /"className":"wsq-desc"/, 'description never occupies its own row')
+assert.match(quickText, /"type":"tooltip"/, 'the help button carries a tooltip')
+assert.match(quickText, /关于快速搜索/)
+assert.match(quickText, /wsq-select/)
+assert.match(quickText, /"5".*"10".*"15".*"20"/)
+
+/** Depth-first search over fake React element trees. */
+function elementsOfType(node, type, found = []) {
+  if (node === null || typeof node !== 'object') return found
+  if (node.type === type) found.push(node)
+  for (const child of node.children ?? []) elementsOfType(child, type, found)
+  return found
+}
+
+const originalFetch = globalThis.fetch
+globalThis.fetch = async () => ({
+  ok: true,
+  json: async () => ({
+    ok: true,
+    value: {
+      sources: [
+        { url: 'https://a.test/result', title: 'A title', snippet: 'A snippet', publishedAt: '2026-01-02' },
+      ],
+      truncated: false,
+    },
+  }),
+})
+try {
+  const sessionId = 'session-quick-search'
+  const firstRender = quickView.component({ t, sessionId })
+  elementsOfType(firstRender, 'input')[0].props.onChange({ target: { value: 'A' } })
+  const secondRender = quickView.component({ t, sessionId })
+  elementsOfType(secondRender, 'form')[0].props.onSubmit({ preventDefault() {} })
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  const thirdRender = quickView.component({ t, sessionId })
+  const persistedText = JSON.stringify(thirdRender)
+  assert.match(persistedText, /A title/, 'query state survives remount')
+  assert.match(persistedText, /A snippet/)
+  assert.match(persistedText, /2026-01-02/)
+} finally {
+  globalThis.fetch = originalFetch
+}
 
 const configSlot = registrations.find((entry) => entry.options.name === 'plugins.bundle.config')
 assert.ok(configSlot, 'bundle config page must be registered')
