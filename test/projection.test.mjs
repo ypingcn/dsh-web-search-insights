@@ -203,4 +203,48 @@ assert.equal(fetchWire.turns['8'].sources[1].cited, true)
 assert.equal(fetchWire.turns['8'].sources[1].fetched, undefined)
 assert.equal(fetchWire.session.fetched, 1)
 
+// 9. `returned` is a lifetime count, so it keeps growing past the matching
+//    pool cap instead of freezing at MAX_POOL.
+const bigSources = Array.from({ length: 4100 }, (_, index) => [`https://big.test/${index}`, `S${index}`])
+const bigState = fold([
+  call(40, 9, 'big', 'web_search', ['big']),
+  result(41, 9, 'big', bigSources),
+  end(42, 9),
+])
+const bigWire = definition.wire.view(bigState)
+assert.equal(bigWire.turns['9'].returned, 4100)
+assert.equal(bigWire.session.returned, 4100, 'session returned does not freeze at the pool cap')
+assert.equal(bigWire.turns['9'].sourceCount, 4100)
+assert.equal(bigWire.turns['9'].sources.length, 50, 'the wire view still caps per-turn sources')
+assert.equal(bigWire.turns['9'].sourcesTruncated, true)
+
+// 11. Text before a tool call is narration, not the final answer: a turn that
+//     ends without a later answer text must not count the narration's links.
+const narrated = fold([
+  call(60, 12, 'n1', 'web_search', ['narrated']),
+  result(61, 12, 'n1', [['https://n.test/a', 'N']]),
+  answer(62, 12, 'I will look at [N](https://n.test/a) next.'),
+  fetchCall(63, 12, 'f1', 'https://n.test/a'),
+  fetchResult(64, 12, 'f1', 'https://n.test/a', 200),
+  end(65, 12),
+])
+const narratedWire = definition.wire.view(narrated)
+assert.equal(narratedWire.turns['12'].cited, 0, 'narration before a tool call is not an answer')
+assert.equal(narratedWire.turns['12'].local, 0)
+assert.equal(narratedWire.session.cited, 0)
+
+// 12. An answer emitted after the tool call still commits normally.
+const followed = fold([
+  call(70, 13, 'n2', 'web_search', ['followed']),
+  result(71, 13, 'n2', [['https://n.test/b', 'N2']]),
+  answer(72, 13, 'Looking at [N2](https://n.test/b) first.'),
+  fetchCall(73, 13, 'f2', 'https://n.test/b'),
+  fetchResult(74, 13, 'f2', 'https://n.test/b', 200),
+  answer(75, 13, 'Final: [N2](https://n.test/b).'),
+  end(76, 13),
+])
+const followedWire = definition.wire.view(followed)
+assert.equal(followedWire.turns['13'].cited, 1)
+assert.equal(followedWire.turns['13'].local, 1)
+
 console.log('projection tests passed')

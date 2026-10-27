@@ -229,7 +229,13 @@ function apply(state, event) {
       }
       const ids = Object.keys(calls)
       for (const stale of ids.slice(0, Math.max(0, ids.length - MAX_CALLS))) delete calls[stale]
-      return { ...state, calls }
+      // Any text emitted before this call is narration, not the final answer;
+      // dropping it keeps a later turn/end from citing the narration.
+      const pending =
+        state.pending !== null && (typeof data.turn !== 'number' || state.pending.turn === data.turn)
+          ? null
+          : state.pending
+      return { ...state, calls, pending }
     }
 
     case 'tool/result': {
@@ -321,10 +327,16 @@ function apply(state, event) {
       }
       const pool = [...state.pool]
       const poolSet = new Set(pool)
+      // `returned` is a lifetime counter, not `pool.length`: the pool is capped
+      // for citation matching, so deriving the count from it would freeze at
+      // MAX_POOL. A source evicted from the pool and returned again later is
+      // counted twice; that needs more than MAX_POOL distinct sources first.
+      let added = 0
       for (const source of sources) {
         if (!poolSet.has(source.key)) {
           poolSet.add(source.key)
           pool.push(source.key)
+          added += 1
         }
       }
       if (pool.length > MAX_POOL) pool.splice(0, pool.length - MAX_POOL)
@@ -346,7 +358,7 @@ function apply(state, event) {
         session: {
           ...state.session,
           searches: state.session.searches + 1,
-          returned: pool.length,
+          returned: state.session.returned + added,
         },
       }
     }
