@@ -36,6 +36,13 @@ export { installQuickSearchRoute, QUICK_SEARCH_PATH } from './quick-search.js'
 export const name = 'web-search-insights'
 
 /**
+ * The only tool with the `{ queries }` argument and `{ sources, truncated }`
+ * result this plugin knows how to log. Kept fixed: a configurable allowlist
+ * would silently accept tools that never produce a record.
+ */
+const OBSERVED_TOOL = 'web_search'
+
+/**
  * Install the `tools/result` observer.
  *
  * @param {any} ctx - Cordis plugin context.
@@ -103,7 +110,7 @@ export function apply(ctx, config) {
     if (!options.enabled) return
     try {
       if (exec === null || typeof exec !== 'object') return
-      if (typeof exec.name !== 'string' || !options.tools.has(exec.name)) return
+      if (exec.name !== OBSERVED_TOOL) return
       const record = buildRecord(exec, result, options)
       if (record === undefined) return
       writerFor(options.file).append(record)

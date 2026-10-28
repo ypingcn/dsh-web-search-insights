@@ -39,10 +39,12 @@ const fakeReact = {
 }
 
 /** Minimal stand-in for the shared settings-form primitives. */
+const formInstances = []
 class FakeSettingsFormModel {
   constructor(scope, specs) {
     this.scope = scope
     this.specs = new Map(specs.map((spec) => [spec.field, spec]))
+    formInstances.push(this)
   }
 
   bind(read) {
@@ -73,7 +75,17 @@ class FakeSettingsFormModel {
   }
 
   actions() {
-    return { edit() {}, resetField() {}, save() {}, discard() {} }
+    const self = this
+    return {
+      edit() {},
+      resetField(field) {
+        self.resetFields = [...(self.resetFields ?? []), field]
+      },
+      save() {
+        self.saveCalls = (self.saveCalls ?? 0) + 1
+      },
+      discard() {},
+    }
   }
 
   dispose() {}
@@ -129,8 +141,6 @@ const fakeConfigForms = {
         user: undefined,
         value: {
           enabled: true,
-          file: '~/.dsh/logs/web-search.jsonl',
-          tools: ['web_search'],
           recordErrors: true,
           quickSearchView: true,
         },
@@ -323,10 +333,14 @@ const configCard = configSlot.component({ ...configFace, view: 'page', t })
 const configText = JSON.stringify(configCard)
 assert.match(configText, /插件配置/)
 assert.match(configText, /启用插件/)
-assert.match(configText, /日志文件/)
+assert.match(configText, /日志目录/)
+assert.match(configText, /web-search\.jsonl/, 'the fixed file name is explained')
+assert.match(configText, /~\/\.dsh\/logs/, 'the directory falls back to the schema default')
+assert.match(configText, /wsi-directory/)
+assert.doesNotMatch(configText, /wsi-file/, 'the legacy path is not rendered')
 assert.match(configText, /记录失败调用/)
 assert.match(configText, /快捷搜索页面/)
-assert.match(configText, /观察工具/)
+assert.doesNotMatch(configText, /观察工具/, 'the ineffective tools setting is gone')
 assert.match(configText, /日志大小上限（MB）/)
 assert.match(configText, /保留轮转份数/)
 assert.match(configText, /保留天数/)
@@ -351,12 +365,41 @@ assert.equal(
 )
 assert.equal(
   (configText.match(/"type":"field"/g) ?? []).length,
-  5,
-  'file, tools, and the three rotation limits',
+  4,
+  'directory and the three rotation limits',
 )
 assert.match(configText, /wsi-field-toggle/)
 assert.match(configText, /wsi-toggle-row/)
 assert.match(configText, /wsi-toggle-grid/)
+assert.match(configText, /重置全部/)
+const footActions = findClass(configCard, 'wsi-foot-actions')
+assert.ok(footActions, 'save and reset-all share one footer action group')
+const footButtons = (footActions.children ?? []).filter((child) => child?.type === 'button')
+assert.deepEqual(
+  footButtons.map((button) => button.props.className),
+  ['wsi-save', 'wsi-reset-all'],
+  'reset-all sits to the right of Save',
+)
+assert.equal(footButtons[1].children[0], '重置全部')
+{
+  const model = formInstances.at(-1)
+  configFace.resetAll()
+  assert.deepEqual(
+    model.resetFields,
+    [
+      'enabled',
+      'recordErrors',
+      'quickSearchView',
+      'directory',
+      'file',
+      'maxSizeMb',
+      'maxFiles',
+      'retentionDays',
+    ],
+    'reset-all stages every config field',
+  )
+  assert.equal(model.saveCalls, 1, 'reset-all saves immediately instead of waiting for Save')
+}
 
 const entryElement = turnTail.component({
   turn: { turn: 1 },

@@ -36,8 +36,13 @@ export interface WebSearchLogRecord {
 
 export interface Config {
   enabled?: boolean
+  /** Log directory; the plugin always writes `web-search.jsonl` inside it. */
+  directory?: string
+  /**
+   * @deprecated Full log path from older profiles. Ignored when `directory` is
+   * present.
+   */
   file?: string
-  tools?: string[]
   recordErrors?: boolean
   /** Show the "quick search" conversation view (browser-side switch). */
   quickSearchView?: boolean

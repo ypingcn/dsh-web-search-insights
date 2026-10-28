@@ -10,7 +10,7 @@
 #   - id: web-search-insights
 #     name: dsh-web-search-insights
 #     config:
-#       file: ~/.dsh/logs/web-search.jsonl
+#       directory: ~/.dsh/logs
 - insert:
     - id: web-search-insights
       name: dsh-web-search-insights

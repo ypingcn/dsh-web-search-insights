@@ -10,7 +10,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from '
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apply, Config, name } from '../src/index.js'
-import { readConfigField, snapshotConfig } from '../src/config.js'
+import { normalizeConfig, readConfigField, snapshotConfig } from '../src/config.js'
 import { JsonlWriter } from '../src/writer.js'
 
 /** Minimal Cordis context that records event handlers. */
@@ -138,6 +138,23 @@ try {
   await dispose()
   await assert.rejects(() => readFile(disabledFile, 'utf8'))
 
+  // Legacy `tools` keys in existing profiles are ignored; the observer is
+  // fixed to web_search instead of trusting a now-removed allowlist.
+  const legacy = join(root, 'legacy.jsonl')
+  ctx = createContext()
+  dispose = apply(ctx, { file: legacy, tools: ['bash'] })
+  ctx.emit('tools/result', searchExec(), successResult)
+  await dispose()
+  assert.equal((await readRecords(legacy)).length, 1, 'legacy tools config no longer narrows observation')
+
+  // Directory mode writes the fixed file name inside the configured directory.
+  const directoryLogs = join(root, 'directory-mode')
+  ctx = createContext()
+  dispose = apply(ctx, { directory: directoryLogs })
+  ctx.emit('tools/result', searchExec(), successResult)
+  await dispose()
+  assert.equal((await readRecords(join(directoryLogs, 'web-search.jsonl'))).length, 1)
+
   // 4. A malformed result never throws into the host.
   const malformed = join(root, 'malformed.jsonl')
   ctx = createContext()
@@ -151,6 +168,7 @@ try {
   assert.equal(record.sourceCount, 0)
 
   // 5. Wrong config types fail loud instead of silently defaulting.
+  assert.throws(() => apply(createContext(), { directory: 42 }), /`directory` must be a non-empty string/)
   assert.throws(() => apply(createContext(), { file: 42 }), /`file` must be a non-empty string/)
   assert.throws(() => apply(createContext(), { enabled: 'yes' }), /`enabled` must be a boolean/)
   assert.throws(
@@ -179,7 +197,6 @@ try {
   const liveConfig = {
     enabled: { get: () => liveEnabled },
     file: { get: () => liveFile },
-    tools: { get: () => ['web_search'] },
     recordErrors: { get: () => true },
   }
   ctx = createContext()
@@ -243,7 +260,6 @@ try {
   const wiringConfig = {
     enabled: { get: () => wiringEnabled },
     file: { get: () => join(root, 'wiring.jsonl') },
-    tools: { get: () => ['web_search'] },
     recordErrors: { get: () => true },
   }
   dispose = apply(wiringCtx, wiringConfig)
@@ -326,12 +342,26 @@ try {
   assert.equal(snapshotConfig({ maxSizeMb: 0.5 }).maxBytes, 512 * 1024)
   assert.equal(snapshotConfig({ maxSizeMb: 0 }).maxBytes, 0)
 
-  // 12. Schema (when the peer resolves) supplies volatile defaults.
+  // 12. A directory fixes the active file name; legacy full paths still work.
+  assert.match(
+    normalizeConfig({ directory: '~/insights' }).file,
+    /[\\/]insights[\\/]web-search\.jsonl$/,
+  )
+  assert.match(snapshotConfig({}).file, /[\\/]\.dsh[\\/]logs[\\/]web-search\.jsonl$/)
+  const legacyPath = join(root, 'legacy-name.jsonl')
+  assert.equal(normalizeConfig({ file: legacyPath }).file, legacyPath)
+  assert.match(
+    normalizeConfig({ directory: '~/insights', file: legacyPath }).file,
+    /[\\/]insights[\\/]web-search\.jsonl$/,
+    'directory wins over the deprecated file',
+  )
+
+  // 13. Schema (when the peer resolves) supplies volatile defaults.
   if (Config) {
     const defaults = Config({})
     assert.equal(readConfigField(defaults, 'enabled'), true)
-    assert.equal(readConfigField(defaults, 'file'), '~/.dsh/logs/web-search.jsonl')
-    assert.deepEqual(readConfigField(defaults, 'tools'), ['web_search'])
+    assert.equal(readConfigField(defaults, 'directory'), undefined, 'the directory has no schema default')
+    assert.equal(readConfigField(defaults, 'file'), undefined, 'the legacy path has no schema default')
     assert.equal(readConfigField(defaults, 'recordErrors'), true)
     assert.equal(readConfigField(defaults, 'quickSearchView'), true)
     assert.equal(readConfigField(defaults, 'maxSizeMb'), 10)
@@ -339,8 +369,9 @@ try {
     assert.equal(readConfigField(defaults, 'retentionDays'), 0)
     assert.equal(typeof defaults.enabled.get, 'function', 'settings fields stay volatile')
     const live = snapshotConfig(defaults)
-    assert.deepEqual([...live.tools], ['web_search'])
     assert.match(live.file, /[\\/]\.dsh[\\/]logs[\\/]web-search\.jsonl$/)
+    const liveDirectory = snapshotConfig(Config({ directory: '~/custom-logs' }))
+    assert.match(liveDirectory.file, /[\\/]custom-logs[\\/]web-search\.jsonl$/)
     assert.equal(live.enabled, true)
     assert.equal(live.recordErrors, true)
     assert.equal(live.quickSearchView, true)
