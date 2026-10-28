@@ -28,7 +28,7 @@ DeepSeek Harness（DSH）插件：把 Agent 的 `web_search` 使用情况做成�
 ### 方式 A：从 npm 安装（推荐）
 
 ```bash
-dsh plugin --profile web add dsh-web-search-insights
+dsh plugin --profile web add @ypingcn/dsh-web-search-insights
 ```
 
 ### 方式 B：从 GitHub 安装
