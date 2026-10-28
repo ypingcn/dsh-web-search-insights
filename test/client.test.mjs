@@ -16,6 +16,8 @@ globalThis.window = {
   },
 }
 
+const stateOverrides = new Map()
+
 const fakeReact = {
   Fragment: Symbol('Fragment'),
   createElement(type, props, ...children) {
@@ -24,6 +26,7 @@ const fakeReact = {
     return { type, props: props ?? {}, children: nextProps.children }
   },
   useState(initial) {
+    if (stateOverrides.has(initial)) return [stateOverrides.get(initial), () => {}]
     return [typeof initial === 'function' ? initial() : initial, () => {}]
   },
   useEffect() {},
@@ -431,6 +434,28 @@ assert.match(panelText, /wsl-fetch-err/)
 assert.match(panelText, /"200"/)
 assert.match(panelText, /"500"/)
 assert.doesNotMatch(panelText, /HTTP 200/)
+assert.match(panelText, /按域名分组/)
+assert.match(panelText, /已抓取/)
+
+// Filters and domain grouping change the rendered rows, not the counters.
+stateOverrides.set("all", "cited")
+stateOverrides.set("flat", "domain")
+try {
+  const filteredPanel = pane.component({
+    useProjection: () => fixture,
+    useTabInfo: () => ({ tab: { navigation: { params: undefined, revision: 0 } } }),
+    t,
+  })
+  const filteredText = JSON.stringify(filteredPanel)
+  assert.match(filteredText, /已按筛选隐藏 4 个来源。/)
+  assert.equal((filteredText.match(/"className":"wsl-group-head"/g) ?? []).length, 2)
+  assert.match(filteredText, /"children":\["A"\]/)
+  assert.match(filteredText, /"children":\["B"\]/)
+  assert.doesNotMatch(filteredText, /"children":\["C"\]/)
+  assert.doesNotMatch(filteredText, /"children":\["D"\]/)
+} finally {
+  stateOverrides.clear()
+}
 
 assert.equal((panelText.match(/"className":"wsl-source-status"/g) ?? []).length, 6, 'mixed list reserves the status column for every row')
 
