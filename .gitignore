@@ -1,5 +1,28 @@
 node_modules/
 *.jsonl
 
+# Packaging / release artifacts
+*.tgz
+dist/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+.eslintcache
+.prettiercache
+
+# Logs and local environment
+*.log
+npm-debug.log*
+.env
+.env.*
+!.env.example
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
 # CodeGraph local index (database, daemon state, logs)
 .codegraph/
