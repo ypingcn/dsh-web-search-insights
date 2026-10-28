@@ -512,6 +512,73 @@ assert.deepEqual(
   'scope track, filter track and grouping toggle are separate toolbar children',
 )
 
+// Keyword folding keeps two rendered rows: the measured cutoff decides how
+// many chips stay, and "+N" follows the last visible chip on the same row.
+assert.doesNotMatch(panelText, /wsl-queries-toggle/, 'one keyword needs no toggle')
+const manyQueriesFixture = {
+  ...fixture,
+  turns: {
+    1: { ...fixture.turns[1], queries: ['alpha', 'beta', 'gamma', 'delta'] },
+  },
+}
+const manyQueriesPanel = () =>
+  pane.component({
+    useProjection: () => manyQueriesFixture,
+    useTabInfo: () => ({ tab: { navigation: { params: undefined, revision: 0 } } }),
+    t,
+  })
+
+// Without a measurable DOM every chip renders; nothing is folded.
+const unmeasuredQueries = JSON.stringify(manyQueriesPanel())
+assert.match(unmeasuredQueries, /"children":\["delta"\]/)
+assert.doesNotMatch(unmeasuredQueries, /wsl-queries-toggle/)
+
+stateOverrides.set('unmeasured', { overflow: true, visible: 2, hidden: 2 })
+try {
+  const collapsedPanel = manyQueriesPanel()
+  const collapsedQueries = JSON.stringify(collapsedPanel)
+  assert.match(collapsedQueries, /"children":\["alpha"\]/)
+  assert.match(collapsedQueries, /"children":\["beta"\]/)
+  assert.doesNotMatch(collapsedQueries, /gamma/, 'extra keywords stay folded')
+  assert.doesNotMatch(collapsedQueries, /delta/, 'extra keywords stay folded')
+  assert.match(collapsedQueries, /"children":\["\+2"\]/)
+  assert.match(collapsedQueries, /展开其余 2 个关键词/)
+
+  const collapsedList = findNode(collapsedPanel, 'wsl-queries')
+  assert.ok(collapsedList, 'the visible keyword list renders')
+  assert.deepEqual(
+    collapsedList.children.filter((child) => child !== null).map((child) => child.props?.className),
+    ['wsl-chip', 'wsl-chip', 'wsl-queries-toggle'],
+    'the +N pill follows the last visible chip instead of taking its own row',
+  )
+  assert.equal(
+    findNode(collapsedPanel, 'wsl-queries-measure'),
+    undefined,
+    'the hidden measuring list only exists in a real DOM',
+  )
+
+  stateOverrides.set(false, true)
+  const expandedPanel = manyQueriesPanel()
+  const expandedQueries = JSON.stringify(expandedPanel)
+  assert.doesNotMatch(expandedQueries, /\+2/, 'the toggle is replaced by the collapse link')
+  assert.match(expandedQueries, /"children":\["gamma"\]/)
+  assert.match(expandedQueries, /"children":\["delta"\]/)
+  assert.match(expandedQueries, /收起/)
+  const expandedList = findNode(expandedPanel, 'wsl-queries')
+  assert.equal(
+    expandedList.children.filter((child) => child !== null).at(-1).props?.className,
+    'wsl-queries-toggle',
+    'the collapse control shares the +N pill styling and row alignment',
+  )
+  stateOverrides.delete(false)
+
+  stateOverrides.set('unmeasured', { overflow: false, visible: 4, hidden: 0 })
+  const fittingQueries = JSON.stringify(manyQueriesPanel())
+  assert.doesNotMatch(fittingQueries, /wsl-queries-toggle/, 'two rows that fit need no toggle')
+} finally {
+  stateOverrides.clear()
+}
+
 // Filters and domain grouping change the rendered rows, not the counters.
 stateOverrides.set("all", "cited")
 stateOverrides.set("flat", "domain")
