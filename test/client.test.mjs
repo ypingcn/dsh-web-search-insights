@@ -483,6 +483,34 @@ assert.match(panelText, /"500"/)
 assert.doesNotMatch(panelText, /HTTP 200/)
 assert.match(panelText, /按域名分组/)
 assert.match(panelText, /已抓取/)
+// Scope and filters share one wrapped toolbar; the grouping toggle is icon-only
+// and carries its label through aria-label/title so the row stays compact.
+assert.equal((panelText.match(/"className":"wsl-toolbar"/g) ?? []).length, 1)
+assert.match(panelText, /"className":"wsl-seg wsl-scope"/)
+assert.match(panelText, /"className":"wsl-seg wsl-filter"/)
+assert.match(panelText, /"className":"wsl-icon-toggle"/)
+assert.match(panelText, /"aria-label":"按域名分组"/)
+assert.doesNotMatch(panelText, /"children":\["按域名分组"\]/)
+
+// The toolbar has three siblings: the scope track, the filter track, and a
+// standalone grouping toggle. The toggle must stay outside the filter track so
+// it reads as a separate control.
+const findNode = (node, className) => {
+  if (node === null || typeof node !== 'object') return undefined
+  if (node.props?.className === className) return node
+  for (const child of node.children ?? []) {
+    const hit = findNode(child, className)
+    if (hit !== undefined) return hit
+  }
+  return undefined
+}
+const toolbarNode = findNode(panelElement, 'wsl-toolbar')
+assert.ok(toolbarNode, 'toolbar is rendered')
+assert.deepEqual(
+  toolbarNode.children.map((child) => child.props?.className),
+  ['wsl-seg wsl-scope', 'wsl-seg wsl-filter', 'wsl-icon-toggle'],
+  'scope track, filter track and grouping toggle are separate toolbar children',
+)
 
 // Filters and domain grouping change the rendered rows, not the counters.
 stateOverrides.set("all", "cited")
