@@ -1,8 +1,19 @@
 {
-  "name": "dsh-web-search-insights",
+  "name": "@ypingcn/dsh-web-search-insights",
   "version": "0.1.0",
-  "description": "DeepSeek Harness plugin: log web_search queries and returned URLs, project per-turn citation statistics, and render the answer-tail entry plus the right-sidebar search panel",
+  "description": "记录每次 web_search 的关键词、返回来源与失败错误码，按轮次与会话统计引用、返回与被抓取的页面，并在回答末尾与右侧栏提供引用入口、可筛选搜索面板，以及不写入日志的快速搜索视图。",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ypingcn/dsh-web-search-insights.git"
+  },
+  "homepage": "https://github.com/ypingcn/dsh-web-search-insights#readme",
+  "bugs": {
+    "url": "https://github.com/ypingcn/dsh-web-search-insights/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "src/index.js",
   "types": "src/index.d.ts",
   "exports": {

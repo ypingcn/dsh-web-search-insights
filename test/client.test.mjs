@@ -6,6 +6,10 @@
  *   node test/client.test.mjs
  */
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+
+/** The Host keys client graph rows by the resolved npm package name. */
+const packageName = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).name
 
 let captured
 globalThis.window = {
@@ -116,13 +120,13 @@ const fakePrimitives = {
 
 await import('../lib/client.js')
 assert.ok(captured, 'bundle must register itself through __ModuleLoader__')
-assert.equal(captured.id, 'dsh-web-search-insights')
+assert.equal(captured.id, packageName)
 const client = captured.factory((name) => {
   if (name === 'react') return fakeReact
   if (name === '@deepseek-ai/dsh-client-ui-primitives') return fakePrimitives
   throw new Error(`unexpected client require: ${name}`)
 })
-assert.equal(client.name, 'dsh-web-search-insights')
+assert.equal(client.name, packageName)
 assert.equal(typeof client.apply, 'function')
 assert.ok(client.inject.includes('slots'))
 assert.ok(client.inject.includes('sidebarRightTabs'))

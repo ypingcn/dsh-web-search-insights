@@ -8,9 +8,9 @@
 # the same row id, e.g.
 #
 #   - id: web-search-insights
-#     name: dsh-web-search-insights
+#     name: "@ypingcn/dsh-web-search-insights"
 #     config:
 #       directory: ~/.dsh/logs
 - insert:
     - id: web-search-insights
-      name: dsh-web-search-insights
+      name: "@ypingcn/dsh-web-search-insights"
