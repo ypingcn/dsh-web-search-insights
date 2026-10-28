@@ -139,7 +139,7 @@ fi
 
 step "8/8 打包、dry-run 发布与登录校验"
 npm pack --dry-run
-npm publish --dry-run --registry "$REGISTRY"
+npm publish --dry-run --access public --registry "$REGISTRY"
 
 if ! WHOAMI=$(npm whoami --registry "$REGISTRY" 2>&1); then
   printf '%s\n' "$WHOAMI" >&2

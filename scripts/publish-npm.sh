@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # publish-npm.sh — 发布到 npm（会真正发布）
 #
-# 流程：预检（调用 scripts/preflight.sh）→ 发布确认 → 交互输入 2FA OTP
-#       → npm publish → 发布后验证
+# 流程：预检（调用 scripts/preflight.sh）→ 发布确认 → npm publish
+#       （2FA 由 npm 走 Web 认证，必要时在浏览器确认）→ 发布后验证
 #
 # 用法：
 #   ./scripts/publish-npm.sh
@@ -13,7 +13,7 @@
 # - 预检阶段不会升级版本号、也不会执行 git add/commit/push（避免发布过程中改动仓库）；
 #   要做这些请先跑 preflight.sh。
 # - 发布必须指向 registry.npmjs.org；脚本显式覆盖，不修改全局 npm 配置。
-# - OTP 为空时按“账号未开 2FA”处理；OTP 失效会重新询问，最多 3 次。
+# - 不传 --otp：2FA 交给 npm 按其 auth-type 配置处理（web 模式会打开浏览器认证）。
 # - 任何一步失败即中止。
 set -euo pipefail
 
@@ -24,7 +24,7 @@ while [[ $# -gt 0 ]]; do
     --registry)
       [[ $# -ge 2 ]] || { echo "✗ --registry 需要一个参数" >&2; exit 2; }
       REGISTRY="$2"; shift 2 ;;
-    -h|--help) sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "✗ 未知参数：$1（--help 查看用法）" >&2; exit 2 ;;
   esac
 done
@@ -51,29 +51,14 @@ SPEC="$NAME@$VERSION"
 
 step "2/3 发布到 npm"
 note "目标：$SPEC → $REGISTRY"
+note "2FA 认证由 npm 处理：如打开浏览器，请按提示完成授权。"
 read -r -p "确认发布？输入 yes 继续（其他输入取消）：" CONFIRM
 [[ "$CONFIRM" == "yes" ]] || die "已取消，未发布任何内容"
 
-attempt=0
-while :; do
-  read -r -p "请输入 npm 2FA 验证码 OTP（未开 2FA 直接回车）：" OTP
-  OTP="${OTP//[[:space:]]/}"
-  args=(publish --registry "$REGISTRY")
-  [[ -n "$OTP" ]] && args+=("--otp=$OTP")
-
-  if output=$(npm "${args[@]}" 2>&1); then
-    printf '%s\n' "$output"
-    break
-  fi
-  printf '%s\n' "$output" >&2
-  if grep -qiE 'EOTP|one[- ]time password|otp' <<<"$output" && (( attempt < 2 )); then
-    attempt=$((attempt + 1))
-    echo
-    echo "⚠️  OTP 无效或已过期，重新输入（重试 $attempt/2）"
-    continue
-  fi
+args=(publish --access public --registry "$REGISTRY")
+if ! npm "${args[@]}"; then
   die "发布失败（上面是 npm 的原始输出）"
-done
+fi
 
 step "3/3 验证已发布"
 npm view "$SPEC" version repository.url dist.tarball --registry "$REGISTRY" --json
