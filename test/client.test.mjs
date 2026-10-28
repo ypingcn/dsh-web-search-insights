@@ -345,7 +345,7 @@ assert.match(configText, /~\/\.dsh\/logs/, 'the directory falls back to the sche
 assert.match(configText, /wsi-directory/)
 assert.doesNotMatch(configText, /wsi-file/, 'the legacy path is not rendered')
 assert.match(configText, /记录失败调用/)
-assert.match(configText, /快捷搜索页面/)
+assert.match(configText, /快速搜索页面/)
 assert.doesNotMatch(configText, /观察工具/, 'the ineffective tools setting is gone')
 assert.match(configText, /日志大小上限（MB）/)
 assert.match(configText, /保留轮转份数/)
