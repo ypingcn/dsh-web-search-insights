@@ -6,11 +6,12 @@
  *   node test/unit.mjs
  */
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apply, Config, name } from '../src/index.js'
 import { readConfigField, snapshotConfig } from '../src/config.js'
+import { JsonlWriter } from '../src/writer.js'
 
 /** Minimal Cordis context that records event handlers. */
 function createContext() {
@@ -156,6 +157,19 @@ try {
     () => apply(createContext(), { quickSearchView: 'yes' }),
     /`quickSearchView` must be a boolean/,
   )
+  assert.throws(
+    () => apply(createContext(), { maxSizeMb: -1 }),
+    /`maxSizeMb` must be a non-negative number/,
+  )
+  assert.throws(
+    () => apply(createContext(), { maxSizeMb: '10' }),
+    /`maxSizeMb` must be a non-negative number/,
+  )
+  assert.throws(() => apply(createContext(), { maxFiles: 1.5 }), /`maxFiles` must be a non-negative integer/)
+  assert.throws(
+    () => apply(createContext(), { retentionDays: '7' }),
+    /`retentionDays` must be a non-negative integer/,
+  )
 
   // 6. Volatile config refs: live edits move the writer and toggle logging.
   const liveA = join(root, 'live-a.jsonl')
@@ -243,7 +257,76 @@ try {
   assert.equal(projections, 2, 're-enabling registers the projection again')
   await dispose()
 
-  // 8. Schema (when the peer resolves) supplies volatile defaults.
+  // 8. Size rotation keeps every record when `maxFiles` is unlimited.
+  const logger = { warn() {} }
+  const rotationDir = join(root, 'rotation')
+  const rotationFile = join(rotationDir, 'web-search.jsonl')
+  const rotationWriter = new JsonlWriter(rotationFile, logger, {
+    maxBytes: 220,
+    maxFiles: 0,
+    retentionDays: 0,
+  })
+  for (let index = 0; index < 10; index += 1) {
+    rotationWriter.append({ index, pad: 'x'.repeat(80) })
+  }
+  await rotationWriter.flush()
+  let rotationNames = (await readdir(rotationDir)).sort()
+  assert.equal(rotationNames.includes('web-search.jsonl'), true, 'the active file stays in place')
+  assert.ok(
+    rotationNames.some((entry) => entry.startsWith('web-search.jsonl.')),
+    'the writer rotated at least once',
+  )
+  let rotatedLines = 0
+  for (const entry of rotationNames) {
+    rotatedLines += (await readFile(join(rotationDir, entry), 'utf8')).split('\n').filter(Boolean).length
+  }
+  assert.equal(rotatedLines, 10, 'rotation never drops a record')
+
+  // 9. `maxFiles` keeps only the newest rotated files.
+  const cappedDir = join(root, 'rotation-capped')
+  const cappedWriter = new JsonlWriter(join(cappedDir, 'web-search.jsonl'), logger, {
+    maxBytes: 220,
+    maxFiles: 2,
+    retentionDays: 0,
+  })
+  for (let index = 0; index < 10; index += 1) {
+    cappedWriter.append({ index, pad: 'x'.repeat(80) })
+  }
+  await cappedWriter.flush()
+  rotationNames = (await readdir(cappedDir)).sort()
+  assert.equal(
+    rotationNames.filter((entry) => entry.startsWith('web-search.jsonl.')).length,
+    2,
+    'maxFiles keeps exactly two rotated files',
+  )
+
+  // 10. Retention deletes only old rotated files, never unrelated ones.
+  const retentionDir = join(root, 'retention')
+  await mkdir(retentionDir, { recursive: true })
+  const retentionFile = join(retentionDir, 'web-search.jsonl')
+  const oldRotated = `${retentionFile}.2026-01-01T00-00-00-000Z`
+  const unrelated = join(retentionDir, 'keep-me.txt')
+  await writeFile(oldRotated, 'old\n')
+  await writeFile(unrelated, 'keep\n')
+  const monthAgo = new Date(Date.now() - 30 * 86_400_000)
+  await utimes(oldRotated, monthAgo, monthAgo)
+  const retentionWriter = new JsonlWriter(retentionFile, logger, {
+    maxBytes: 10_000,
+    maxFiles: 0,
+    retentionDays: 7,
+  })
+  // Cleanup runs on the first append, without waiting for a rotation.
+  retentionWriter.append({ pad: 'x'.repeat(10) })
+  await retentionWriter.flush()
+  const retained = await readdir(retentionDir)
+  assert.equal(retained.includes('web-search.jsonl.2026-01-01T00-00-00-000Z'), false, 'expired file removed')
+  assert.equal(retained.includes('keep-me.txt'), true, 'unrelated files are untouched')
+
+  // 11. MB is the user-facing unit; the writer still receives bytes.
+  assert.equal(snapshotConfig({ maxSizeMb: 0.5 }).maxBytes, 512 * 1024)
+  assert.equal(snapshotConfig({ maxSizeMb: 0 }).maxBytes, 0)
+
+  // 12. Schema (when the peer resolves) supplies volatile defaults.
   if (Config) {
     const defaults = Config({})
     assert.equal(readConfigField(defaults, 'enabled'), true)
@@ -251,6 +334,9 @@ try {
     assert.deepEqual(readConfigField(defaults, 'tools'), ['web_search'])
     assert.equal(readConfigField(defaults, 'recordErrors'), true)
     assert.equal(readConfigField(defaults, 'quickSearchView'), true)
+    assert.equal(readConfigField(defaults, 'maxSizeMb'), 10)
+    assert.equal(readConfigField(defaults, 'maxFiles'), 5)
+    assert.equal(readConfigField(defaults, 'retentionDays'), 0)
     assert.equal(typeof defaults.enabled.get, 'function', 'settings fields stay volatile')
     const live = snapshotConfig(defaults)
     assert.deepEqual([...live.tools], ['web_search'])
@@ -258,6 +344,10 @@ try {
     assert.equal(live.enabled, true)
     assert.equal(live.recordErrors, true)
     assert.equal(live.quickSearchView, true)
+    assert.equal(live.maxSizeMb, 10)
+    assert.equal(live.maxBytes, 10 * 1024 * 1024)
+    assert.equal(live.maxFiles, 5)
+    assert.equal(live.retentionDays, 0)
     assert.equal('includeSnippet' in defaults, false)
     assert.equal('includeAnswer' in defaults, false)
   } else {

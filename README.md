@@ -33,7 +33,7 @@ web profile 默认启用 HMR，本地 link 安装后改 `src/` 会触发热重�
 
 ## 配置项
 
-插件管理页打开「搜索溯源」后，详情页里会直接出现配置表单，可修改下面五项并保存；保存写入 profile 配置并即时生效（无需重启）。也可以继续手写 profile 的 `cordis.patch.yml`。
+插件管理页打开「搜索溯源」后，详情页里会直接出现配置表单，可修改下面八项并保存；保存写入 profile 配置并即时生效（无需重启）。也可以继续手写 profile 的 `cordis.patch.yml`。
 
 | 字段 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -42,6 +42,9 @@ web profile 默认启用 HMR，本地 link 安装后改 `src/` 会触发热重�
 | `tools` | string[] | `["web_search"]` | 要观察的工具名 |
 | `recordErrors` | boolean | `true` | 失败是否也记录 |
 | `quickSearchView` | boolean | `true` | 是否显示会话顶部的「快速搜索」视图；关闭后立即隐藏 |
+| `maxSizeMb` | number | `10` | 活动日志超过该大小（MB）时轮转；`0` 关闭 |
+| `maxFiles` | number | `5` | 保留的轮转文件份数；`0` 不限制 |
+| `retentionDays` | number | `0` | 轮转文件保留天数，超期清理；`0` 不按时间清理 |
 
 ## 快速搜索
 
@@ -61,6 +64,8 @@ web profile 默认启用 HMR，本地 link 安装后改 `src/` 会触发热重�
 ```json
 {"v":1,"ts":"2026-10-24T02:32:00.000Z","tool":"web_search","callId":"call_abc","rootCallId":"call_abc","sessionId":"session-...","provider":"deepseek-official","model":"deepseek-v4-flash","cwd":"/home/user/project","queries":["关键词1","关键词2"],"ok":true,"sourceCount":2,"truncated":false,"sources":[{"url":"https://example.com/a","title":"标题 A"},{"url":"https://example.com/b","title":"标题 B"}]}
 ```
+
+日志超过 `maxSizeMb` 时会改名为 `<文件>.<时间戳>`；`maxFiles` 与 `retentionDays` 控制保留份数和天数，`tail -f` 仍可跟随活动文件。
 
 来源 URL 会去掉 `#fragment`，并按规范化身份去重：同一文档即使带不同跟踪参数也只记一次，与统计面板的匹配规则保持一致。
 

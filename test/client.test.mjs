@@ -267,6 +267,21 @@ function elementsOfType(node, type, found = []) {
   return found
 }
 
+/** Find the first element carrying one className. */
+function findClass(node, className) {
+  if (node === null || typeof node !== 'object') return undefined
+  if (node.props?.className === className) return node
+  const children = [
+    ...(Array.isArray(node.children) ? node.children : []),
+    ...(Array.isArray(node.props?.children) ? node.props.children : []),
+  ]
+  for (const child of children) {
+    const hit = findClass(child, className)
+    if (hit !== undefined) return hit
+  }
+  return undefined
+}
+
 const originalFetch = globalThis.fetch
 globalThis.fetch = async () => ({
   ok: true,
@@ -309,10 +324,32 @@ assert.match(configText, /日志文件/)
 assert.match(configText, /记录失败调用/)
 assert.match(configText, /快捷搜索页面/)
 assert.match(configText, /观察工具/)
+assert.match(configText, /日志大小上限（MB）/)
+assert.match(configText, /保留轮转份数/)
+assert.match(configText, /保留天数/)
+const limitGrid = findClass(configCard, 'wsi-limit-grid')
+assert.ok(limitGrid, 'the three rotation limits share one row')
+assert.equal(
+  limitGrid.children.filter((child) => child && child.type === 'field').length,
+  3,
+  'size, file count, and retention stay in the same grid',
+)
+assert.deepEqual(
+  limitGrid.children
+    .filter((child) => child && child.type === 'field')
+    .map((child) => child.props.text),
+  ['10', '5', '0'],
+  'the three limits show their defaults when the Host serves no resolved section',
+)
 assert.equal(
   (configText.match(/"className":"wsi-field wsi-field-toggle"/g) ?? []).length,
   3,
   'all three toggles share one row',
+)
+assert.equal(
+  (configText.match(/"type":"field"/g) ?? []).length,
+  5,
+  'file, tools, and the three rotation limits',
 )
 assert.match(configText, /wsi-field-toggle/)
 assert.match(configText, /wsi-toggle-row/)

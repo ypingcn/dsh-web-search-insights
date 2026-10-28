@@ -49,7 +49,7 @@ export function apply(ctx, config) {
   // Everything the plugin owns is re-read from this snapshot; settings writes
   // replace volatile config values in place and emit `loader/volatile-update`.
   let options = snapshotConfig(config)
-  let writer = new JsonlWriter(options.file, ctx.logger)
+  let writer = new JsonlWriter(options.file, ctx.logger, options)
   /** @type {any} */
   let projection
 
@@ -82,15 +82,19 @@ export function apply(ctx, config) {
 
   ctx.on('loader/volatile-update', () => {
     options = snapshotConfig(config)
+    writer.configure(options)
     syncProjection()
   })
 
   /** Point appends at the current `file`, draining the previous writer. */
   const retired = []
   const writerFor = (file) => {
-    if (writer.file === file) return writer
+    if (writer.file === file) {
+      writer.configure(options)
+      return writer
+    }
     const previous = writer
-    writer = new JsonlWriter(file, ctx.logger)
+    writer = new JsonlWriter(file, ctx.logger, options)
     retired.push(previous)
     return writer
   }

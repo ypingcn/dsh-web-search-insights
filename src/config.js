@@ -17,6 +17,15 @@ export const DEFAULT_FILE = '~/.dsh/logs/web-search.jsonl'
 /** Tools whose settled result carries `{ queries }` + `{ sources, truncated }`. */
 export const DEFAULT_TOOLS = ['web_search']
 
+/** Rotate the active log once it would exceed this many MB (0 disables). */
+export const DEFAULT_MAX_SIZE_MB = 10
+
+/** Rotated files kept next to the active log (0 keeps every rotation). */
+export const DEFAULT_MAX_FILES = 5
+
+/** Delete rotated logs older than this many days (0 disables age cleanup). */
+export const DEFAULT_RETENTION_DAYS = 0
+
 /**
  * Optional peer dependency. A missing module is not an activation failure:
  * the schema is a convenience, not a runtime requirement.
@@ -37,6 +46,12 @@ export const Config = z?.object({
   recordErrors: z.boolean().default(true).volatile(),
   /** Show the "quick search" conversation view. Browser-side gate. */
   quickSearchView: z.boolean().default(true).volatile(),
+  /** Rotate the active log at this size in MB; 0 disables size rotation. */
+  maxSizeMb: z.number().default(DEFAULT_MAX_SIZE_MB).volatile(),
+  /** Rotated files to keep; 0 keeps all of them. */
+  maxFiles: z.number().default(DEFAULT_MAX_FILES).volatile(),
+  /** Delete rotated files older than this many days; 0 disables age cleanup. */
+  retentionDays: z.number().default(DEFAULT_RETENTION_DAYS).volatile(),
 })
 
 /**
@@ -76,6 +91,32 @@ function assertConfigTypes(source) {
       throw new TypeError('web-search-insights: `tools` must be an array of non-empty tool names')
     }
   }
+  if (
+    source.maxSizeMb !== undefined &&
+    (typeof source.maxSizeMb !== 'number' || !Number.isFinite(source.maxSizeMb) || source.maxSizeMb < 0)
+  ) {
+    throw new TypeError('web-search-insights: `maxSizeMb` must be a non-negative number')
+  }
+  for (const field of ['maxFiles', 'retentionDays']) {
+    if (source[field] !== undefined && (!Number.isInteger(source[field]) || source[field] < 0)) {
+      throw new TypeError(`web-search-insights: \`${field}\` must be a non-negative integer`)
+    }
+  }
+}
+
+/** Read a non-negative integer, falling back to the schema default. */
+function readCount(value, fallback) {
+  return Number.isInteger(value) && value >= 0 ? value : fallback
+}
+
+/** Read a non-negative MB value, falling back to the schema default. */
+function readMegabytes(value, fallback) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback
+}
+
+/** Convert a MB setting to the byte limit the writer consumes. */
+function megabytesToBytes(value) {
+  return Math.round(value * 1024 * 1024)
 }
 
 /**
@@ -88,12 +129,17 @@ function assertConfigTypes(source) {
  *   tools: Set<string>,
  *   recordErrors: boolean,
  *   quickSearchView: boolean,
+ *   maxSizeMb: number,
+ *   maxBytes: number,
+ *   maxFiles: number,
+ *   retentionDays: number,
  * }} normalized options.
  */
 export function normalizeConfig(config) {
   const source = config !== null && typeof config === 'object' && !Array.isArray(config) ? config : {}
   assertConfigTypes(source)
   const tools = Array.isArray(source.tools) ? source.tools : []
+  const maxSizeMb = readMegabytes(source.maxSizeMb, DEFAULT_MAX_SIZE_MB)
   return {
     enabled: source.enabled !== false,
     file: resolveLogFile(
@@ -104,6 +150,10 @@ export function normalizeConfig(config) {
     tools: new Set(tools.length > 0 ? tools : DEFAULT_TOOLS),
     recordErrors: source.recordErrors !== false,
     quickSearchView: source.quickSearchView !== false,
+    maxSizeMb,
+    maxBytes: megabytesToBytes(maxSizeMb),
+    maxFiles: readCount(source.maxFiles, DEFAULT_MAX_FILES),
+    retentionDays: readCount(source.retentionDays, DEFAULT_RETENTION_DAYS),
   }
 }
 
@@ -138,5 +188,8 @@ export function snapshotConfig(config) {
     tools: readConfigField(config, 'tools'),
     recordErrors: readConfigField(config, 'recordErrors'),
     quickSearchView: readConfigField(config, 'quickSearchView'),
+    maxSizeMb: readConfigField(config, 'maxSizeMb'),
+    maxFiles: readConfigField(config, 'maxFiles'),
+    retentionDays: readConfigField(config, 'retentionDays'),
   })
 }

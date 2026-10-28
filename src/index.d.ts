@@ -41,6 +41,12 @@ export interface Config {
   recordErrors?: boolean
   /** Show the "quick search" conversation view (browser-side switch). */
   quickSearchView?: boolean
+  /** Rotate the active log at this many MB; 0 disables rotation. */
+  maxSizeMb?: number
+  /** Rotated files to keep; 0 keeps all of them. */
+  maxFiles?: number
+  /** Delete rotated files older than this many days; 0 disables age cleanup. */
+  retentionDays?: number
 }
 
 export declare function apply(ctx: Context, config?: Config): () => Promise<void>
