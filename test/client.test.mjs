@@ -330,7 +330,9 @@ try {
 
 const configSlot = registrations.find((entry) => entry.options.name === 'plugins.bundle.config')
 assert.ok(configSlot, 'bundle config page must be registered')
-assert.equal(configSlot.options.key, 'dsh-web-search-insights')
+// The plugin manager dispatches this slot by the bundle's npm package name, so
+// the key must track package.json rather than the internal sidebar ids.
+assert.equal(configSlot.options.key, packageName)
 assert.equal(configSlot.options.locale, 'dsh-web-search-insights')
 const configFace = configSlot.options.inject()
 const configCard = configSlot.component({ ...configFace, view: 'page', t })

@@ -1,2 +1,5 @@
 node_modules/
 *.jsonl
+
+# CodeGraph local index (database, daemon state, logs)
+.codegraph/

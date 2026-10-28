@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "@ypingcn/dsh-web-search-insights",
+    "title": "dsh-web-search-insights",
     "description": "Records every web_search query with its returned URLs, keeps per-turn and per-session citation statistics, and adds the answer-tail entry plus the right-sidebar search panel."
   }
 }
