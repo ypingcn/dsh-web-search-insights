@@ -32,6 +32,7 @@
     "lib/client.js",
     "cordis.patch.yml",
     "README.md",
+    "docs/screenshots",
     "locale/*.json"
   ],
   "scripts": {
