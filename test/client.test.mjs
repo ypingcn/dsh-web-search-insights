@@ -588,6 +588,20 @@ assert.deepEqual(fetchOnlyImages, [
   'https://other.test/favicon.ico',
 ], 'fetch-only icons fall back to one favicon per fetched host')
 
+const emptySession = {
+  v: 1,
+  session: { searches: 0, returned: 0, cited: 0, occurrences: 0, fetched: 0, fetchFailed: 0 },
+  turns: {},
+}
+const emptyStatsPanel = pane.component({
+  useProjection: () => emptySession,
+  useTabInfo: () => ({ tab: { navigation: { params: undefined, revision: 0 } } }),
+  t,
+})
+const emptyStatsText = JSON.stringify(emptyStatsPanel)
+assert.match(emptyStatsText, /还没有联网记录/)
+assert.doesNotMatch(emptyStatsText, /"className":"wsl-head"/, 'an empty session does not reserve a zero-height stats row')
+
 const panelElement = pane.component({
   useProjection: () => fixture,
   useTabInfo: () => ({
@@ -598,6 +612,7 @@ const panelElement = pane.component({
 const panelText = JSON.stringify(panelElement)
 assert.match(panelText, /搜索记录/)
 assert.match(panelText, /"className":"wsl-chrome"/, 'head and toolbar share a fixed chrome wrapper')
+assert.match(panelText, /"role":"region"/, 'the panel exposes a named region')
 assert.match(panelText, /"className":"wsl-body"/, 'the turn list owns the panel scroll area')
 assert.match(panelText, /"className":"wsl-sr"/, 'the visible panel title is delegated to the sidebar tab')
 assert.match(panelText, /会话累计引用 2 个来源（共 3 次） · 返回 3 个 · 搜索 2 次 · 获取 2 个网页/)
