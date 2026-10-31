@@ -45,6 +45,14 @@ const fetchResult = (seq, turn, callId, url, statusCode = 200) =>
     meta: { url, statusCode, truncated: false },
   })
 
+const fetchErrorResult = (seq, turn, callId) =>
+  event(seq, 'tool/result', {
+    turn,
+    step: 1,
+    message: { role: 'tool', source: { kind: 'tool', callId }, content: [], isError: true },
+    error: { message: 'fetch failed' },
+  })
+
 const answer = (seq, turn, text) =>
   event(seq, 'assistant/message', {
     turn,
@@ -83,13 +91,15 @@ assert.deepEqual(wire.turns['1'], {
   queries: ['alpha'],
   fetchCount: 0,
   fetches: [],
+  failedFetchCount: 0,
+  failedFetches: [],
   sourceCount: 2,
   sources: [
     { url: 'https://a.test/x?utm_source=news', title: 'A', cited: true },
     { url: 'https://b.test/y', title: 'B', cited: false },
   ],
 })
-assert.deepEqual(wire.session, { searches: 1, returned: 2, cited: 1, occurrences: 1, fetched: 0 })
+assert.deepEqual(wire.session, { searches: 1, returned: 2, cited: 1, occurrences: 1, fetched: 0, fetchFailed: 0 })
 
 // 2. Turn 2 has no new search but cites both earlier sources.
 state = definition.apply(state, answer(4, 2, 'Again [A](https://a.test/x) and [B](https://b.test/y).'))
@@ -278,5 +288,21 @@ assert.equal(fetchOnlyWire.turns['14'].sourceCount, 0)
 assert.equal(fetchOnlyWire.session.searches, 0)
 assert.equal(fetchOnlyWire.session.fetched, 1)
 assert.equal(fetchOnlyWire.latestTurn, 14)
+
+// 15. A failed web_fetch keeps its row and a failure record instead of being
+//     dropped: the client shows failures in the entry and the panel.
+const failedFetch = fold([
+  fetchCall(90, 15, 'ff1', 'https://doc.test/missing'),
+  fetchErrorResult(91, 15, 'ff1'),
+  end(92, 15),
+])
+const failedFetchWire = definition.wire.view(failedFetch)
+assert.equal(failedFetchWire.turns['15'].searchCalls, 0)
+assert.equal(failedFetchWire.turns['15'].fetchCount, 0)
+assert.equal(failedFetchWire.turns['15'].failedFetchCount, 1)
+assert.deepEqual(failedFetchWire.turns['15'].failedFetches, [{ url: 'https://doc.test/missing' }])
+assert.equal(failedFetchWire.session.fetchFailed, 1)
+assert.equal(failedFetchWire.session.fetched, 0)
+assert.equal(failedFetchWire.latestTurn, 15)
 
 console.log('projection tests passed')

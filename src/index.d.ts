@@ -34,6 +34,34 @@ export interface WebSearchLogRecord {
   }
 }
 
+/** One JSONL entry written for a settled `web_fetch` call. */
+export interface WebFetchLogRecord {
+  v: 1
+  ts: string
+  tool: 'web_fetch'
+  callId: string
+  rootCallId: string
+  sessionId?: string
+  provider?: string
+  model?: string
+  cwd?: string
+  /** Requested URL, normalized. */
+  url: string
+  ok: boolean
+  statusCode?: number
+  truncated?: boolean
+  /** Decoded body kind; content itself is never logged. */
+  bodyKind?: 'html' | 'text'
+  contentLength?: number
+  error?: {
+    message: string
+    name?: string
+    code?: string
+  }
+}
+
+export type WebInsightLogRecord = WebSearchLogRecord | WebFetchLogRecord
+
 export interface Config {
   enabled?: boolean
   /** Log directory; the plugin always writes `web-search.jsonl` inside it. */
@@ -46,6 +74,8 @@ export interface Config {
   recordErrors?: boolean
   /** Show the "quick search" conversation view (browser-side switch). */
   quickSearchView?: boolean
+  /** Show the turn-tail entry for turns that only fetched pages (browser-side switch). */
+  fetchEntry?: boolean
   /** Rotate the active log at this many MB; 0 disables rotation. */
   maxSizeMb?: number
   /** Rotated files to keep; 0 keeps all of them. */

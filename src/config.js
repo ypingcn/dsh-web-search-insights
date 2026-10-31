@@ -55,6 +55,8 @@ export const Config = z?.object({
   recordErrors: z.boolean().default(true).volatile(),
   /** Show the "quick search" conversation view. Browser-side gate. */
   quickSearchView: z.boolean().default(true).volatile(),
+  /** Show the turn-tail entry for turns that only fetched pages. Browser-side gate. */
+  fetchEntry: z.boolean().default(true).volatile(),
   /** Rotate the active log at this size in MB; 0 disables size rotation. */
   maxSizeMb: z.number().default(DEFAULT_MAX_SIZE_MB).volatile(),
   /** Rotated files to keep; 0 keeps all of them. */
@@ -88,7 +90,7 @@ function assertConfigTypes(source) {
   if (source.enabled !== undefined && typeof source.enabled !== 'boolean') {
     throw new TypeError('web-search-insights: `enabled` must be a boolean')
   }
-  for (const field of ['recordErrors', 'quickSearchView']) {
+  for (const field of ['recordErrors', 'quickSearchView', 'fetchEntry']) {
     if (source[field] !== undefined && typeof source[field] !== 'boolean') {
       throw new TypeError(`web-search-insights: \`${field}\` must be a boolean`)
     }
@@ -139,6 +141,7 @@ function megabytesToBytes(value) {
  *   file: string,
  *   recordErrors: boolean,
  *   quickSearchView: boolean,
+ *   fetchEntry: boolean,
  *   maxSizeMb: number,
  *   maxBytes: number,
  *   maxFiles: number,
@@ -165,6 +168,7 @@ export function normalizeConfig(config) {
         : resolveHostPath(legacyFile ?? DEFAULT_FILE),
     recordErrors: source.recordErrors !== false,
     quickSearchView: source.quickSearchView !== false,
+    fetchEntry: source.fetchEntry !== false,
     maxSizeMb,
     maxBytes: megabytesToBytes(maxSizeMb),
     maxFiles: readCount(source.maxFiles, DEFAULT_MAX_FILES),
@@ -203,6 +207,7 @@ export function snapshotConfig(config) {
     file: readConfigField(config, 'file'),
     recordErrors: readConfigField(config, 'recordErrors'),
     quickSearchView: readConfigField(config, 'quickSearchView'),
+    fetchEntry: readConfigField(config, 'fetchEntry'),
     maxSizeMb: readConfigField(config, 'maxSizeMb'),
     maxFiles: readConfigField(config, 'maxFiles'),
     retentionDays: readConfigField(config, 'retentionDays'),

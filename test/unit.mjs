@@ -44,6 +44,32 @@ function searchExec(overrides = {}) {
   }
 }
 
+/** Fake successful `web_fetch` execution. */
+function fetchExec(overrides = {}) {
+  return {
+    name: 'web_fetch',
+    callId: 'call_fetch',
+    rootCallId: 'call_fetch',
+    arguments: { url: 'https://example.com/doc' },
+    agent: {
+      id: 'session-1',
+      options: { provider: 'mint-dev', model: 'MintDevDS' },
+      session: { meta: { cwd: '/home/user/project' } },
+    },
+    ...overrides,
+  }
+}
+
+const fetchSuccessResult = {
+  isError: false,
+  value: {
+    url: 'https://example.com/doc',
+    statusCode: 200,
+    body: { kind: 'html', content: '<html>secret body</html>' },
+    truncated: false,
+  },
+}
+
 const successResult = {
   isError: false,
   value: {
@@ -122,12 +148,43 @@ try {
     code: 'WEB_PROVIDER_ERROR',
   })
 
-  // 3. Ignored inputs write nothing: other tools, blank queries, disabled.
+  // 3. A settled web_fetch logs its URL and HTTP outcome, never the body.
+  const fetchFile = join(root, 'fetch.jsonl')
+  ctx = createContext()
+  dispose = apply(ctx, { file: fetchFile })
+  ctx.emit('tools/result', fetchExec(), fetchSuccessResult)
+  await dispose()
+  const [fetchRecord] = await readRecords(fetchFile)
+  assert.equal(fetchRecord.tool, 'web_fetch')
+  assert.equal(fetchRecord.url, 'https://example.com/doc')
+  assert.equal(fetchRecord.statusCode, 200)
+  assert.equal(fetchRecord.truncated, false)
+  assert.equal(fetchRecord.bodyKind, 'html')
+  assert.equal(fetchRecord.contentLength, 24)
+  assert.equal(fetchRecord.sessionId, 'session-1')
+  assert.equal(fetchRecord.body, undefined, 'the fetched body is never logged')
+  assert.equal(fetchRecord.content, undefined, 'the fetched content is never logged')
+
+  const fetchErrorFile = join(root, 'fetch-error.jsonl')
+  ctx = createContext()
+  dispose = apply(ctx, { file: fetchErrorFile })
+  ctx.emit('tools/result', fetchExec(), {
+    isError: true,
+    error: { message: 'fetch exploded', info: { name: 'WebError', code: 'WEB_FETCH_ERROR' } },
+  })
+  await dispose()
+  const [fetchErrorRecord] = await readRecords(fetchErrorFile)
+  assert.equal(fetchErrorRecord.ok, false)
+  assert.equal(fetchErrorRecord.url, 'https://example.com/doc')
+  assert.equal(fetchErrorRecord.error.code, 'WEB_FETCH_ERROR')
+
+  // 4. Ignored inputs write nothing: other tools, blank queries/URLs, disabled.
   const ignored = join(root, 'ignored.jsonl')
   ctx = createContext()
   dispose = apply(ctx, { file: ignored })
   ctx.emit('tools/result', { ...searchExec(), name: 'bash' }, successResult)
   ctx.emit('tools/result', searchExec({ arguments: { queries: ['  '] } }), successResult)
+  ctx.emit('tools/result', fetchExec({ arguments: { url: '  ' } }), fetchSuccessResult)
   await dispose()
   await assert.rejects(() => readFile(ignored, 'utf8'))
 
@@ -139,7 +196,7 @@ try {
   await assert.rejects(() => readFile(disabledFile, 'utf8'))
 
   // Legacy `tools` keys in existing profiles are ignored; the observer is
-  // fixed to web_search instead of trusting a now-removed allowlist.
+  // fixed to web_search/web_fetch instead of trusting a now-removed allowlist.
   const legacy = join(root, 'legacy.jsonl')
   ctx = createContext()
   dispose = apply(ctx, { file: legacy, tools: ['bash'] })
@@ -174,6 +231,10 @@ try {
   assert.throws(
     () => apply(createContext(), { quickSearchView: 'yes' }),
     /`quickSearchView` must be a boolean/,
+  )
+  assert.throws(
+    () => apply(createContext(), { fetchEntry: 'yes' }),
+    /`fetchEntry` must be a boolean/,
   )
   assert.throws(
     () => apply(createContext(), { maxSizeMb: -1 }),
@@ -364,6 +425,7 @@ try {
     assert.equal(readConfigField(defaults, 'file'), undefined, 'the legacy path has no schema default')
     assert.equal(readConfigField(defaults, 'recordErrors'), true)
     assert.equal(readConfigField(defaults, 'quickSearchView'), true)
+    assert.equal(readConfigField(defaults, 'fetchEntry'), true)
     assert.equal(readConfigField(defaults, 'maxSizeMb'), 10)
     assert.equal(readConfigField(defaults, 'maxFiles'), 5)
     assert.equal(readConfigField(defaults, 'retentionDays'), 0)
@@ -375,6 +437,7 @@ try {
     assert.equal(live.enabled, true)
     assert.equal(live.recordErrors, true)
     assert.equal(live.quickSearchView, true)
+    assert.equal(live.fetchEntry, true)
     assert.equal(live.maxSizeMb, 10)
     assert.equal(live.maxBytes, 10 * 1024 * 1024)
     assert.equal(live.maxFiles, 5)

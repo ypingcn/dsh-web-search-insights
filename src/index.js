@@ -4,16 +4,18 @@
  * Three outputs from one package:
  *
  * 1. JSONL audit log: every settled `web_search` call becomes one line with
- *    the search keywords plus the returned URLs and titles.
+ *    the search keywords plus the returned URLs and titles; every successful
+ *    `web_fetch` call logs its URL and HTTP outcome (body content excluded).
  * 2. Session statistics: the `webSearchInsights` projection folds durable
  *    session events into per-turn citation/source counters for the client.
  * 3. UI: the answer-tail citation entry, the right-sidebar search panel, and
  *    the plugin page's configuration card (browser half in `lib/client.js`).
  *
  * Hook: the tool registry's `tools/result` emit, which receives the settled
- * execution and the canonical `web_search` value:
+ * execution and its canonical value:
  *
- *   { sources: [{ url, title?, snippet?, publishedAt? }], truncated, content? }
+ *   web_search: { sources: [{ url, title?, snippet?, publishedAt? }], truncated }
+ *   web_fetch:  { url, statusCode, body: { kind, content }, truncated }
  *
  * Logging is fail-safe: I/O and projection errors are logged through
  * `ctx.logger` and can never change the result the model sees.
@@ -36,11 +38,11 @@ export { installQuickSearchRoute, QUICK_SEARCH_PATH } from './quick-search.js'
 export const name = 'web-search-insights'
 
 /**
- * The only tool with the `{ queries }` argument and `{ sources, truncated }`
- * result this plugin knows how to log. Kept fixed: a configurable allowlist
- * would silently accept tools that never produce a record.
+ * The tools whose result shape this plugin knows how to log. Kept fixed: a
+ * configurable allowlist would silently accept tools that never produce a
+ * record.
  */
-const OBSERVED_TOOL = 'web_search'
+const OBSERVED_TOOLS = new Set(['web_search', 'web_fetch'])
 
 /**
  * Install the `tools/result` observer.
@@ -110,7 +112,7 @@ export function apply(ctx, config) {
     if (!options.enabled) return
     try {
       if (exec === null || typeof exec !== 'object') return
-      if (exec.name !== OBSERVED_TOOL) return
+      if (!OBSERVED_TOOLS.has(exec.name)) return
       const record = buildRecord(exec, result, options)
       if (record === undefined) return
       writerFor(options.file).append(record)

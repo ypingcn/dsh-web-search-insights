@@ -66,6 +66,8 @@ function emptyTurn() {
     occurrences: 0,
     fetches: [],
     fetchCount: 0,
+    failedFetches: [],
+    failedFetchCount: 0,
   }
 }
 
@@ -256,7 +258,39 @@ function apply(state, event) {
       const calls = { ...state.calls, [callId]: { ...call, done: true } }
 
       if (call.name === 'web_fetch') {
-        if (data.message?.isError === true || data.error !== undefined) return { ...state, calls }
+        if (data.message?.isError === true || data.error !== undefined) {
+          const requested = typeof call.url === 'string' ? call.url : ''
+          if (requested === '') return { ...state, calls }
+          const turn = typeof call.turn === 'number' && call.turn > 0 ? call.turn : data.turn
+          if (typeof turn !== 'number') return { ...state, calls }
+          const current = state.turns[String(turn)] ?? emptyTurn()
+          const failedFetches = [...current.failedFetches]
+          if (
+            failedFetches.length < MAX_SOURCES_PER_TURN &&
+            !failedFetches.some((fetch) => fetch.key === requested)
+          ) {
+            failedFetches.push({ key: requested, url: displayUrl(requested) })
+          }
+          const sessionKeys = new Set(state.failedFetchKeys)
+          sessionKeys.add(requested)
+          return {
+            ...state,
+            calls,
+            failedFetchKeys: [...sessionKeys].slice(-MAX_POOL),
+            turns: {
+              ...state.turns,
+              [String(turn)]: {
+                ...current,
+                failedFetches,
+                failedFetchCount: failedFetches.length,
+              },
+            },
+            session: {
+              ...state.session,
+              fetchFailed: Math.min(sessionKeys.size, MAX_POOL),
+            },
+          }
+        }
         const requested = typeof call.url === 'string' ? call.url : ''
         const final = typeof data.meta?.url === 'string' ? normalizeUrl(data.meta.url) : ''
         const key = final !== '' ? final : requested
@@ -409,7 +443,8 @@ function init(_header, inheritedEventCount) {
     pool: [],
     citedKeys: [],
     fetchedKeys: [],
-    session: { searches: 0, returned: 0, cited: 0, occurrences: 0, fetched: 0 },
+    failedFetchKeys: [],
+    session: { searches: 0, returned: 0, cited: 0, occurrences: 0, fetched: 0, fetchFailed: 0 },
   }
 }
 
@@ -442,6 +477,8 @@ function turnView(turn) {
       url: fetch.url,
       ...(fetch.statusCode !== undefined ? { statusCode: fetch.statusCode } : {}),
     })),
+    failedFetchCount: turn.failedFetchCount ?? 0,
+    failedFetches: (turn.failedFetches ?? []).map((fetch) => ({ url: fetch.url })),
     sourceCount: turn.sources.length,
     sources: turn.sources.slice(0, MAX_SOURCES_PER_TURN).map((source) => ({
       url: displayUrl(source.url),
@@ -491,6 +528,7 @@ function view(state) {
       cited: state.session.cited,
       occurrences: state.session.occurrences,
       fetched: state.session.fetched ?? 0,
+      fetchFailed: state.session.fetchFailed ?? 0,
     },
     turns,
     ...(turnKeys.length > 0 ? { latestTurn: Number(turnKeys[0]) } : {}),
@@ -502,7 +540,7 @@ function view(state) {
 /** Registered projection definition. */
 export const webSearchInsightsDefinition = {
   key: KEY,
-  stateVersion: 2,
+  stateVersion: 3,
   stateSchema: objectSchema,
   init,
   apply,
