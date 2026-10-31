@@ -261,4 +261,22 @@ const followedWire = definition.wire.view(followed)
 assert.equal(followedWire.turns['13'].cited, 1)
 assert.equal(followedWire.turns['13'].local, 1)
 
+// 14. A fetch-only turn (no search, no citation) stays a wire row: `turn/end`
+//     may not fold it away, because the client renders its entry from this row.
+const fetchOnly = fold([
+  fetchCall(80, 14, 'fo1', 'https://doc.test/a'),
+  fetchResult(81, 14, 'fo1', 'https://doc.test/a', 200),
+  answer(82, 14, '根据 https://doc.test/a 的内容……'),
+  end(83, 14),
+])
+const fetchOnlyWire = definition.wire.view(fetchOnly)
+assert.equal(fetchOnlyWire.turns['14'].searchCalls, 0)
+assert.equal(fetchOnlyWire.turns['14'].cited, 0)
+assert.equal(fetchOnlyWire.turns['14'].fetchCount, 1)
+assert.deepEqual(fetchOnlyWire.turns['14'].fetches, [{ url: 'https://doc.test/a', statusCode: 200 }])
+assert.equal(fetchOnlyWire.turns['14'].sourceCount, 0)
+assert.equal(fetchOnlyWire.session.searches, 0)
+assert.equal(fetchOnlyWire.session.fetched, 1)
+assert.equal(fetchOnlyWire.latestTurn, 14)
+
 console.log('projection tests passed')

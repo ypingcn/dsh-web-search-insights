@@ -443,11 +443,71 @@ const zeroEntry = turnTail.component({
 })
 assert.match(JSON.stringify(zeroEntry), /本轮引用 0 个网页 · 会话累计 2 个网页 · 搜索返回 4 个网页/)
 
+const fetchOnlyFixture = {
+  ...fixture,
+  turns: {
+    ...fixture.turns,
+    3: {
+      searchCalls: 0,
+      returned: 0,
+      cited: 0,
+      local: 0,
+      occurrences: 0,
+      queries: [],
+      fetchCount: 2,
+      fetches: [
+        { url: 'https://doc.test/a', statusCode: 200 },
+        { url: 'https://doc.test/b', statusCode: 404 },
+      ],
+      sourceCount: 0,
+      sources: [],
+    },
+  },
+}
+const fetchOnlyEntry = turnTail.component({
+  turn: { turn: 3 },
+  useProjection: (_key, selector) => selector(fetchOnlyFixture),
+  t,
+  openPanel: () => {},
+})
+const fetchOnlyText = JSON.stringify(fetchOnlyEntry)
+assert.match(fetchOnlyText, /主动抓取 2 个网页数据/, 'fetch-only entry reports the fetched page count')
+assert.doesNotMatch(fetchOnlyText, /本轮引用 0 个网页/, 'fetch-only entry does not claim zero citations')
+assert.doesNotMatch(fetchOnlyText, /会话累计/, 'fetch-only entry does not borrow the citation-session copy')
+assert.match(fetchOnlyText, /本轮获取的网页数据/, 'fetch-only entry carries its own tooltip')
+assert.match(fetchOnlyText, /可能看过/, 'fetched icons are labelled as may-have-read')
+
+const idleFixture = {
+  ...fixture,
+  turns: {
+    ...fixture.turns,
+    4: {
+      searchCalls: 0,
+      returned: 0,
+      cited: 0,
+      local: 0,
+      occurrences: 0,
+      queries: [],
+      fetchCount: 0,
+      fetches: [],
+      sourceCount: 0,
+      sources: [],
+    },
+  },
+}
+const idleEntry = turnTail.component({
+  turn: { turn: 4 },
+  useProjection: (_key, selector) => selector(idleFixture),
+  t,
+  openPanel: () => {},
+})
+assert.equal(idleEntry, null, 'a turn with no search, citation, or fetch keeps no entry')
+
 const images = []
-function collectImages(node) {
+function collectImages(node, target = images) {
   if (node === null || typeof node !== 'object') return
-  if (node.type === 'img') images.push(node.props.src)
-  for (const child of node.children ?? []) collectImages(child)
+  if (node.type === 'img') target.push(node.props.src)
+  for (const child of node.children ?? []) collectImages(child, target)
 }
 collectImages(entryElement)
 assert.deepEqual(images, [
@@ -457,6 +517,13 @@ assert.deepEqual(images, [
   'https://icons.test/d.png',
   'https://icons.test/e.png',
 ], 'cited icons first, then uncited by rerank score, capped at five')
+
+const fetchOnlyImages = []
+collectImages(fetchOnlyEntry, fetchOnlyImages)
+assert.deepEqual(fetchOnlyImages, [
+  'https://doc.test/favicon.ico',
+  'https://doc.test/favicon.ico',
+], 'fetch-only icons fall back to the favicon of each fetched host')
 
 const panelElement = pane.component({
   useProjection: () => fixture,
@@ -491,6 +558,23 @@ assert.match(panelText, /"className":"wsl-seg wsl-filter"/)
 assert.match(panelText, /"className":"wsl-icon-toggle"/)
 assert.match(panelText, /"aria-label":"按域名分组"/)
 assert.doesNotMatch(panelText, /"children":\["按域名分组"\]/)
+
+// A fetch-only turn keeps a card: fetch count replaces the zero-search label
+// and the empty citation statistics stay out of the header.
+const fetchOnlyPanel = pane.component({
+  useProjection: () => fetchOnlyFixture,
+  useTabInfo: () => ({
+    tab: { navigation: { params: { sessionId: 'session-1', turn: 3 }, revision: 1 } },
+  }),
+  t,
+})
+const fetchOnlyPanelText = JSON.stringify(fetchOnlyPanel)
+assert.match(fetchOnlyPanelText, /主动抓取 2 个网页数据/, 'fetch-only card surfaces the fetch count')
+assert.doesNotMatch(fetchOnlyPanelText, /0 次搜索/, 'fetch-only card does not claim zero searches')
+assert.doesNotMatch(fetchOnlyPanelText, /本轮回答引用 0 个来源/, 'fetch-only card omits zero citation stats')
+assert.match(fetchOnlyPanelText, /主动抓取数据的页面/)
+assert.match(fetchOnlyPanelText, /wsl-fetch-ok/)
+assert.match(fetchOnlyPanelText, /wsl-fetch-err/)
 
 // The toolbar has three siblings: the scope track, the filter track, and a
 // standalone grouping toggle. The toggle must stay outside the filter track so

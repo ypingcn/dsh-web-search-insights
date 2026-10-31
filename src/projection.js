@@ -170,7 +170,9 @@ function commitTurn(state, turn) {
     if (localSources.has(key)) local += 1
   }
 
-  // A turn with no searches and no citations is not worth a row.
+  // A turn with no searches and no citations adds no row here. A fetch-only
+  // turn already created its row when the fetch result arrived, so it must not
+  // be removed by this shortcut: the client renders its entry from that row.
   if (current.searchCalls === 0 && cited === 0) {
     return { ...state, pending: null }
   }
