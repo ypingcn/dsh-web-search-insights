@@ -147,6 +147,7 @@ const fakeConfigForms = {
           enabled: true,
           recordErrors: true,
           quickSearchView: true,
+          fetchEntry: true,
         },
       }),
       subscribe() {
@@ -324,13 +325,16 @@ try {
   assert.match(persistedText, /A title/, 'query state survives remount')
   assert.match(persistedText, /A snippet/)
   assert.match(persistedText, /2026-01-02/)
+  const dateNode = findClass(thirdRender, 'wsq-result-date')
+  assert.equal(dateNode.props.title, '2026-01-02', 'the raw provider timestamp stays in the tooltip')
+  assert.notEqual(dateNode.children[0], '2026-01-02', 'the visible date is formatted, not raw ISO')
 } finally {
   globalThis.fetch = originalFetch
 }
 
 const configSlot = registrations.find((entry) => entry.options.name === 'plugins.bundle.config')
 assert.ok(configSlot, 'bundle config page must be registered')
-assert.equal(configSlot.options.key, 'dsh-web-search-insights')
+assert.equal(configSlot.options.key, '@ypingcn/dsh-web-search-insights')
 assert.equal(configSlot.options.locale, 'dsh-web-search-insights')
 const configFace = configSlot.options.inject()
 const configCard = configSlot.component({ ...configFace, view: 'page', t })
@@ -344,6 +348,7 @@ assert.match(configText, /wsi-directory/)
 assert.doesNotMatch(configText, /wsi-file/, 'the legacy path is not rendered')
 assert.match(configText, /记录失败调用/)
 assert.match(configText, /快速搜索页面/)
+assert.match(configText, /纯抓取轮次显示入口/)
 assert.doesNotMatch(configText, /观察工具/, 'the ineffective tools setting is gone')
 assert.match(configText, /日志大小上限（MB）/)
 assert.match(configText, /保留轮转份数/)
@@ -364,8 +369,8 @@ assert.deepEqual(
 )
 assert.equal(
   (configText.match(/"className":"wsi-field wsi-field-toggle"/g) ?? []).length,
-  3,
-  'all three toggles share one row',
+  4,
+  'all four toggles share the two-column grid',
 )
 assert.equal(
   (configText.match(/"type":"field"/g) ?? []).length,
@@ -394,6 +399,7 @@ assert.equal(footButtons[1].children[0], '重置全部')
       'enabled',
       'recordErrors',
       'quickSearchView',
+      'fetchEntry',
       'directory',
       'file',
       'maxSizeMb',
@@ -454,10 +460,11 @@ const fetchOnlyFixture = {
       local: 0,
       occurrences: 0,
       queries: [],
-      fetchCount: 2,
+      fetchCount: 3,
       fetches: [
         { url: 'https://doc.test/a', statusCode: 200 },
         { url: 'https://doc.test/b', statusCode: 404 },
+        { url: 'https://other.test/c', statusCode: 200 },
       ],
       sourceCount: 0,
       sources: [],
@@ -471,11 +478,67 @@ const fetchOnlyEntry = turnTail.component({
   openPanel: () => {},
 })
 const fetchOnlyText = JSON.stringify(fetchOnlyEntry)
-assert.match(fetchOnlyText, /主动抓取 2 个网页数据/, 'fetch-only entry reports the fetched page count')
+assert.match(fetchOnlyText, /主动抓取 3 个网页数据/, 'fetch-only entry reports the fetched page count')
 assert.doesNotMatch(fetchOnlyText, /本轮引用 0 个网页/, 'fetch-only entry does not claim zero citations')
 assert.doesNotMatch(fetchOnlyText, /会话累计/, 'fetch-only entry does not borrow the citation-session copy')
 assert.match(fetchOnlyText, /本轮获取的网页数据/, 'fetch-only entry carries its own tooltip')
 assert.match(fetchOnlyText, /可能看过/, 'fetched icons are labelled as may-have-read')
+
+const failedFetchFixture = {
+  ...fixture,
+  session: { searches: 0, returned: 0, cited: 0, occurrences: 0, fetched: 0, fetchFailed: 1 },
+  turns: {
+    ...fixture.turns,
+    5: {
+      searchCalls: 0,
+      returned: 0,
+      cited: 0,
+      local: 0,
+      occurrences: 0,
+      queries: [],
+      fetchCount: 0,
+      fetches: [],
+      failedFetchCount: 1,
+      failedFetches: [{ url: 'https://fail.test/a' }],
+      sourceCount: 0,
+      sources: [],
+    },
+  },
+}
+const failedFetchEntry = turnTail.component({
+  turn: { turn: 5 },
+  useProjection: (_key, selector) => selector(failedFetchFixture),
+  t,
+  openPanel: () => {},
+})
+assert.match(JSON.stringify(failedFetchEntry), /获取失败 1 个网页/, 'failed fetch still shows an entry')
+
+const failedFetchPanel = pane.component({
+  useProjection: () => failedFetchFixture,
+  useTabInfo: () => ({
+    tab: { navigation: { params: { sessionId: 'session-1', turn: 5 }, revision: 1 } },
+  }),
+  t,
+})
+const failedFetchPanelText = JSON.stringify(failedFetchPanel)
+assert.match(failedFetchPanelText, /1 个失败/, 'failed fetch card reports the failed count')
+assert.match(failedFetchPanelText, /失败 1 个网页/, 'failed fetch session summary reports the failure')
+assert.match(failedFetchPanelText, /wsl-fetch-err/, 'failed fetch row uses the error pill')
+assert.match(failedFetchPanelText, /https:\/\/fail.test\/a/)
+
+stateOverrides.set("flat", "domain")
+try {
+  const groupedFailedPanel = JSON.stringify(
+    pane.component({
+      useProjection: () => failedFetchFixture,
+      useTabInfo: () => ({ tab: { navigation: { params: { sessionId: 'session-1', turn: 5 }, revision: 1 } } }),
+      t,
+    }),
+  )
+  assert.match(groupedFailedPanel, /1 项/, 'a mixed fetch group reports items, not pages')
+} finally {
+  stateOverrides.clear()
+}
 
 const idleFixture = {
   ...fixture,
@@ -522,8 +585,8 @@ const fetchOnlyImages = []
 collectImages(fetchOnlyEntry, fetchOnlyImages)
 assert.deepEqual(fetchOnlyImages, [
   'https://doc.test/favicon.ico',
-  'https://doc.test/favicon.ico',
-], 'fetch-only icons fall back to the favicon of each fetched host')
+  'https://other.test/favicon.ico',
+], 'fetch-only icons fall back to one favicon per fetched host')
 
 const panelElement = pane.component({
   useProjection: () => fixture,
@@ -534,6 +597,8 @@ const panelElement = pane.component({
 })
 const panelText = JSON.stringify(panelElement)
 assert.match(panelText, /搜索记录/)
+assert.match(panelText, /"className":"wsl-chrome"/, 'head and toolbar share a sticky chrome wrapper')
+assert.match(panelText, /"className":"wsl-sr"/, 'the visible panel title is delegated to the sidebar tab')
 assert.match(panelText, /会话累计引用 2 个来源（共 3 次） · 返回 3 个 · 搜索 2 次 · 获取 2 个网页/)
 assert.match(panelText, /本轮回答引用 2 个来源，其中 1 个来自本轮搜索；本轮共返回 2 个来源。/)
 assert.match(panelText, /已引用/)
@@ -542,7 +607,7 @@ assert.match(panelText, /可能看过/)
 assert.match(panelText, /wsl-source-status/)
 assert.match(panelText, /已引用/)
 assert.match(panelText, /"@"/)
-assert.match(panelText, /主动抓取数据的页面/)
+assert.match(panelText, /主动抓取的页面/)
 assert.match(panelText, /wsl-fetch-ok/)
 assert.match(panelText, /wsl-fetch-err/)
 assert.match(panelText, /"200"/)
@@ -561,18 +626,29 @@ assert.doesNotMatch(panelText, /"children":\["按域名分组"\]/)
 
 // A fetch-only turn keeps a card: fetch count replaces the zero-search label
 // and the empty citation statistics stay out of the header.
+const fetchOnlySessionFixture = {
+  ...fetchOnlyFixture,
+  session: { searches: 0, returned: 0, cited: 0, occurrences: 0, fetched: 3 },
+}
 const fetchOnlyPanel = pane.component({
-  useProjection: () => fetchOnlyFixture,
+  useProjection: () => fetchOnlySessionFixture,
   useTabInfo: () => ({
     tab: { navigation: { params: { sessionId: 'session-1', turn: 3 }, revision: 1 } },
   }),
   t,
 })
 const fetchOnlyPanelText = JSON.stringify(fetchOnlyPanel)
-assert.match(fetchOnlyPanelText, /主动抓取 2 个网页数据/, 'fetch-only card surfaces the fetch count')
+assert.match(fetchOnlyPanelText, /3 个页面/, 'fetch-only card surfaces the fetched page count')
+assert.match(fetchOnlyPanelText, /获取 3 个网页/, 'fetch-only session summary keeps only the fetched total')
+assert.equal(
+  (fetchOnlyPanelText.match(/"wsl-stat-count"/g) ?? []).length,
+  1,
+  'fetch-only header keeps only the page statistic and drops zero counters',
+)
+assert.doesNotMatch(fetchOnlyPanelText, /会话累计引用/, 'fetch-only session summary omits zero search totals')
 assert.doesNotMatch(fetchOnlyPanelText, /0 次搜索/, 'fetch-only card does not claim zero searches')
 assert.doesNotMatch(fetchOnlyPanelText, /本轮回答引用 0 个来源/, 'fetch-only card omits zero citation stats')
-assert.match(fetchOnlyPanelText, /主动抓取数据的页面/)
+assert.match(fetchOnlyPanelText, /主动抓取的页面/)
 assert.match(fetchOnlyPanelText, /wsl-fetch-ok/)
 assert.match(fetchOnlyPanelText, /wsl-fetch-err/)
 
@@ -674,11 +750,28 @@ try {
   })
   const filteredText = JSON.stringify(filteredPanel)
   assert.match(filteredText, /已按筛选隐藏 4 个来源。/)
+  assert.match(filteredText, /已按筛选隐藏 2 个抓取页面。/, 'the cited filter also hides fetched pages')
+  assert.equal((filteredText.match(/"className":"wsl-fetch"/g) ?? []).length, 0)
   assert.equal((filteredText.match(/"className":"wsl-group-head"/g) ?? []).length, 2)
   assert.match(filteredText, /"children":\["A"\]/)
   assert.match(filteredText, /"children":\["B"\]/)
   assert.doesNotMatch(filteredText, /"children":\["C"\]/)
   assert.doesNotMatch(filteredText, /"children":\["D"\]/)
+} finally {
+  stateOverrides.clear()
+}
+
+// Domain grouping also groups fetched pages, without changing source groups.
+stateOverrides.set("flat", "domain")
+try {
+  const groupedPanel = pane.component({
+    useProjection: () => fixture,
+    useTabInfo: () => ({ tab: { navigation: { params: undefined, revision: 0 } } }),
+    t,
+  })
+  const groupedText = JSON.stringify(groupedPanel)
+  assert.equal((groupedText.match(/"className":"wsl-fetch-group-head"/g) ?? []).length, 2)
+  assert.equal((groupedText.match(/"className":"wsl-fetch"/g) ?? []).length, 2)
 } finally {
   stateOverrides.clear()
 }
@@ -752,7 +845,7 @@ assert.match(manyText, /加载更多（剩余 10 轮）/)
                 revision: 1,
                 base: {},
                 user: undefined,
-                value: { enabled: true, quickSearchView: false },
+                value: { enabled: true, quickSearchView: false, fetchEntry: false },
               }),
               subscribe() {
                 return () => {}
@@ -793,6 +886,20 @@ assert.match(manyText, /加载更多（剩余 10 轮）/)
     false,
     'disabling quickSearchView removes the view',
   )
+  const offFetchOnlyEntry = turnTail.component({
+    turn: { turn: 3 },
+    useProjection: (_key, selector) => selector(fetchOnlyFixture),
+    t,
+    openPanel: () => {},
+  })
+  assert.equal(offFetchOnlyEntry, null, 'disabling fetchEntry hides fetch-only entries')
+  const offSearchEntry = turnTail.component({
+    turn: { turn: 1 },
+    useProjection: (_key, selector) => selector(fixture),
+    t,
+    openPanel: () => {},
+  })
+  assert.notEqual(offSearchEntry, null, 'search entries stay visible when fetchEntry is off')
 }
 
 console.log('client tests passed')
