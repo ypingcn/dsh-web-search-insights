@@ -275,6 +275,9 @@ assert.doesNotMatch(quickText, /"className":"wsq-desc"/, 'description never occu
 assert.match(quickText, /"type":"tooltip"/, 'the help button carries a tooltip')
 assert.match(quickText, /关于快速搜索/)
 assert.match(quickText, /wsq-select/)
+assert.match(quickText, /wsq-select-icon/, 'the native select uses an in-page chevron')
+assert.match(quickText, /"role":"status"/, 'quick-search status text is announced')
+assert.match(quickText, /"aria-live":"polite"/, 'quick-search status uses a polite live region')
 assert.match(quickText, /"5".*"10".*"15".*"20"/)
 
 /** Depth-first search over fake React element trees. */
