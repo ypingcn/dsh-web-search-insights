@@ -7,8 +7,9 @@
  *
  * Rotation happens inside the same queue as appends, so a rotation can never
  * interleave with a write. Rotated files sit next to the active log as
- * `<file>.<ISO timestamp>`; only names matching that exact suffix are considered
- * for cleanup, so unrelated files are never touched.
+ * `<file>.<ISO timestamp>`, with a `-<n>` counter when two rotations land in the
+ * same millisecond; only names matching that shape are considered for cleanup,
+ * so unrelated files are never touched.
  *
  * @module dsh-web-search-insights/writer
  */
@@ -16,7 +17,7 @@ import { appendFile, mkdir, readdir, rename, stat, unlink } from 'node:fs/promis
 import { basename, dirname, join } from 'node:path'
 
 /** Suffix of a rotated file; also the guard for cleanup. */
-const ROTATION_SUFFIX = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/u
+const ROTATION_SUFFIX = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(?:-\d+)?$/u
 
 /** Read a non-negative integer limit, falling back to "disabled". */
 function readLimit(value) {
@@ -161,9 +162,8 @@ export class JsonlWriter {
    * @returns {Promise<void>}
    */
   async #rotate() {
-    const target = `${this.#file}.${rotationSuffix()}`
     try {
-      await rename(this.#file, target)
+      await rename(this.#file, await this.#rotationTarget())
     } catch (error) {
       if (error?.code !== 'ENOENT') {
         this.#warn(`cannot rotate ${this.#file}`, error)
@@ -172,6 +172,40 @@ export class JsonlWriter {
     }
     this.#bytes = 0
     await this.#prune()
+  }
+
+  /**
+   * Pick a rotation name that does not exist yet. Multiple rotations can land in
+   * the same millisecond, and `rename` would silently replace the earlier file,
+   * dropping its records; a counter suffix keeps every rotation.
+   *
+   * @returns {Promise<string>} unused path next to the active log.
+   */
+  async #rotationTarget() {
+    const stamp = rotationSuffix()
+    let target = `${this.#file}.${stamp}`
+    let counter = 0
+    while (await this.#exists(target)) {
+      counter += 1
+      target = `${this.#file}.${stamp}-${counter}`
+    }
+    return target
+  }
+
+  /**
+   * Whether a path exists; other stat failures are real errors for the caller.
+   *
+   * @param {string} path - absolute path to probe.
+   * @returns {Promise<boolean>} true when a filesystem entry is present.
+   */
+  async #exists(path) {
+    try {
+      await stat(path)
+      return true
+    } catch (error) {
+      if (error?.code === 'ENOENT') return false
+      throw error
+    }
   }
 
   /** Delete rotated files beyond `maxFiles` or older than `retentionDays`. */

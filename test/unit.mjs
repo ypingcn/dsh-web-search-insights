@@ -359,6 +359,23 @@ try {
   }
   assert.equal(rotatedLines, 10, 'rotation never drops a record')
 
+  // 8b. Rotations inside the same millisecond never overwrite each other.
+  const burstDir = join(root, 'rotation-burst')
+  const burstWriter = new JsonlWriter(join(burstDir, 'web-search.jsonl'), logger, {
+    maxBytes: 100,
+    maxFiles: 0,
+    retentionDays: 0,
+  })
+  for (let index = 0; index < 100; index += 1) {
+    burstWriter.append({ index, pad: 'x'.repeat(80) })
+  }
+  await burstWriter.flush()
+  let burstLines = 0
+  for (const entry of await readdir(burstDir)) {
+    burstLines += (await readFile(join(burstDir, entry), 'utf8')).split('\n').filter(Boolean).length
+  }
+  assert.equal(burstLines, 100, 'same-millisecond rotations keep every record')
+
   // 9. `maxFiles` keeps only the newest rotated files.
   const cappedDir = join(root, 'rotation-capped')
   const cappedWriter = new JsonlWriter(join(cappedDir, 'web-search.jsonl'), logger, {
