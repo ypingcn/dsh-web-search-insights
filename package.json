@@ -1,6 +1,6 @@
 {
   "name": "@ypingcn/dsh-web-search-insights",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "记录每次 web_search 的关键词与返回来源、每次 web_fetch 的页面与 HTTP 结果及失败错误码，按轮次与会话统计引用、返回与抓取情况，并在回答末尾与右侧栏提供入口、可筛选搜索面板，以及不写入日志的快速搜索视图。",
   "author": "ypingcn",
   "type": "module",
