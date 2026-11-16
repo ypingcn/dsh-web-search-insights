@@ -279,6 +279,17 @@ assert.match(quickText, /wsq-select-icon/, 'the native select uses an in-page ch
 assert.match(quickText, /"role":"status"/, 'quick-search status text is announced')
 assert.match(quickText, /"aria-live":"polite"/, 'quick-search status uses a polite live region')
 assert.match(quickText, /"aria-atomic":"true"/, 'outcome live region announces the whole message')
+assert.equal(elementsOfType(quickElement, 'search').length, 1, 'the search form is wrapped in <search>')
+const quickInput = elementsOfType(quickElement, 'input')[0]
+assert.equal(quickInput.props.name, 'query')
+assert.equal(quickInput.props.enterKeyHint, 'search', 'mobile keyboards show a search key')
+assert.equal(quickInput.props.autoCorrect, 'off')
+assert.equal(quickInput.props.spellCheck, false)
+const quickSubmit = elementsOfType(quickElement, 'button').find(
+  (node) => node.props?.className === 'wsq-submit',
+)
+assert.ok(quickSubmit, 'the search button renders')
+assert.equal(quickSubmit.props.disabled, false, 'an empty query is submitted so validation can explain it')
 assert.match(quickText, /"5".*"10".*"15".*"20"/)
 
 /** Depth-first search over fake React element trees. */
@@ -335,6 +346,31 @@ try {
   assert.notEqual(dateNode.children[0], '2026-01-02', 'the visible date is formatted, not raw ISO')
 } finally {
   globalThis.fetch = originalFetch
+}
+
+// The history toggle keeps a stable relationship with its panel even while
+// the panel is collapsed.
+{
+  const originalStorage = globalThis.localStorage
+  const stored = new Map([
+    [
+      'dsh.web-search-insights.quick-search.history',
+      JSON.stringify([{ query: 'stored query', at: 1 }]),
+    ],
+  ])
+  globalThis.localStorage = {
+    getItem: (key) => stored.get(key) ?? null,
+    setItem: (key, value) => stored.set(key, value),
+  }
+  try {
+    const withHistory = JSON.stringify(quickView.component({ t, sessionId: 'session-history' }))
+    assert.match(withHistory, /"aria-controls":"wsq-history"/, 'history toggle points at its panel')
+    assert.match(withHistory, /"id":"wsq-history"/, 'the history panel has the matching id')
+    assert.match(withHistory, /"hidden":true/, 'the collapsed history panel stays in the DOM')
+  } finally {
+    if (originalStorage === undefined) delete globalThis.localStorage
+    else globalThis.localStorage = originalStorage
+  }
 }
 
 const configSlot = registrations.find((entry) => entry.options.name === 'plugins.bundle.config')
@@ -651,6 +687,7 @@ assert.match(panelText, /"aria-label":"按域名分组"/)
 assert.match(panelText, /"aria-pressed":"true"/, 'scope and filters expose their pressed state')
 assert.match(panelText, /"role":"group"/, 'segmented controls are grouped for assistive tech')
 assert.match(panelText, /"className":"wsl-stat-visual"/, 'visual counters sit next to an accessible summary')
+assert.match(panelText, /"aria-live":"polite"/, 'panel state changes are announced')
 assert.doesNotMatch(panelText, /"children":\["按域名分组"\]/)
 
 // A fetch-only turn keeps a card: fetch count replaces the zero-search label
@@ -695,6 +732,17 @@ const findNode = (node, className) => {
 }
 const toolbarNode = findNode(panelElement, 'wsl-toolbar')
 assert.ok(toolbarNode, 'toolbar is rendered')
+assert.equal(findNode(panelElement, 'wsl-card-title').type, 'h3', 'turn titles are real headings')
+const sourcesList = findNode(panelElement, 'wsl-sources')
+assert.equal(sourcesList.type, 'ul', 'sources use list markup')
+assert.equal(sourcesList.props.role, 'list', 'list semantics survive flex layout')
+const fetchList = findNode(panelElement, 'wsl-fetch-list')
+assert.equal(fetchList.type, 'ul', 'fetched pages use list markup')
+const statusCell = findNode(panelElement, 'wsl-source-status')
+assert.ok(
+  elementsOfType(statusCell, 'span').some((node) => node.props?.className === 'wsl-sr'),
+  'source status cells expose a screen-reader label',
+)
 assert.deepEqual(
   toolbarNode.children.map((child) => child.props?.className),
   ['wsl-seg wsl-scope', 'wsl-seg wsl-filter', 'wsl-icon-toggle'],
