@@ -278,6 +278,7 @@ assert.match(quickText, /wsq-select/)
 assert.match(quickText, /wsq-select-icon/, 'the native select uses an in-page chevron')
 assert.match(quickText, /"role":"status"/, 'quick-search status text is announced')
 assert.match(quickText, /"aria-live":"polite"/, 'quick-search status uses a polite live region')
+assert.match(quickText, /"aria-atomic":"true"/, 'outcome live region announces the whole message')
 assert.match(quickText, /"5".*"10".*"15".*"20"/)
 
 /** Depth-first search over fake React element trees. */
@@ -328,6 +329,7 @@ try {
   assert.match(persistedText, /A title/, 'query state survives remount')
   assert.match(persistedText, /A snippet/)
   assert.match(persistedText, /2026-01-02/)
+  assert.match(persistedText, /"role":"list"/, 'flex results keep list semantics')
   const dateNode = findClass(thirdRender, 'wsq-result-date')
   assert.equal(dateNode.props.title, '2026-01-02', 'the raw provider timestamp stays in the tooltip')
   assert.notEqual(dateNode.children[0], '2026-01-02', 'the visible date is formatted, not raw ISO')
@@ -374,6 +376,11 @@ assert.equal(
   (configText.match(/"className":"wsi-field wsi-field-toggle"/g) ?? []).length,
   4,
   'all four toggles share the two-column grid',
+)
+assert.deepEqual(
+  elementsOfType(configCard, 'switch').map((node) => node.props.id),
+  ['wsi-enabled', 'wsi-record-errors', 'wsi-quick-search-view', 'wsi-fetch-entry'],
+  'each switch id matches its label so clicking the label toggles the control',
 )
 assert.equal(
   (configText.match(/"type":"field"/g) ?? []).length,
@@ -641,6 +648,9 @@ assert.match(panelText, /"className":"wsl-seg wsl-scope"/)
 assert.match(panelText, /"className":"wsl-seg wsl-filter"/)
 assert.match(panelText, /"className":"wsl-icon-toggle"/)
 assert.match(panelText, /"aria-label":"按域名分组"/)
+assert.match(panelText, /"aria-pressed":"true"/, 'scope and filters expose their pressed state')
+assert.match(panelText, /"role":"group"/, 'segmented controls are grouped for assistive tech')
+assert.match(panelText, /"className":"wsl-stat-visual"/, 'visual counters sit next to an accessible summary')
 assert.doesNotMatch(panelText, /"children":\["按域名分组"\]/)
 
 // A fetch-only turn keeps a card: fetch count replaces the zero-search label
