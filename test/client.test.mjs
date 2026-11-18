@@ -37,6 +37,10 @@ const fakeReact = {
   useRef(initial) {
     return { current: initial }
   },
+  useId() {
+    fakeReact.idSeed = (fakeReact.idSeed ?? 0) + 1
+    return `t${fakeReact.idSeed}`
+  },
   useSyncExternalStore(_subscribe, getSnapshot) {
     return getSnapshot()
   },
@@ -342,6 +346,8 @@ try {
   assert.match(persistedText, /2026-01-02/)
   assert.match(persistedText, /"role":"list"/, 'flex results keep list semantics')
   const dateNode = findClass(thirdRender, 'wsq-result-date')
+  assert.equal(dateNode.type, 'time', 'the publish date uses machine-readable time markup')
+  assert.equal(dateNode.props.dateTime, '2026-01-02', 'the raw provider timestamp stays machine-readable')
   assert.equal(dateNode.props.title, '2026-01-02', 'the raw provider timestamp stays in the tooltip')
   assert.notEqual(dateNode.children[0], '2026-01-02', 'the visible date is formatted, not raw ISO')
 } finally {
@@ -364,8 +370,8 @@ try {
   }
   try {
     const withHistory = JSON.stringify(quickView.component({ t, sessionId: 'session-history' }))
-    assert.match(withHistory, /"aria-controls":"wsq-history"/, 'history toggle points at its panel')
-    assert.match(withHistory, /"id":"wsq-history"/, 'the history panel has the matching id')
+    assert.match(withHistory, /"aria-controls":"wsq-history-[^"]+"/, 'history toggle points at its panel')
+    assert.match(withHistory, /"id":"wsq-history-[^"]+"/, 'the history panel has the matching id')
     assert.match(withHistory, /"hidden":true/, 'the collapsed history panel stays in the DOM')
   } finally {
     if (originalStorage === undefined) delete globalThis.localStorage
@@ -466,6 +472,11 @@ const entryElement = turnTail.component({
 const entryText = JSON.stringify(entryElement)
 assert.match(entryText, /本轮引用 2 个网页 · 会话累计 2 个网页 · 主动抓取 2 个网页数据/)
 assert.match(entryText, /查看/)
+assert.match(
+  entryText,
+  /"aria-label":"本轮引用 2 个网页 · 会话累计 2 个网页 · 主动抓取 2 个网页数据 · 查看搜索结果"/,
+  'the entry names the counts and the panel action for screen readers',
+)
 assert.match(entryText, /未引用/, 'uncited icons carry a localized tooltip')
 assert.doesNotMatch(entryText, /panel\.notCited/, 'no raw i18n key leaks into the UI')
 
@@ -684,8 +695,8 @@ assert.match(panelText, /"className":"wsl-seg wsl-scope"/)
 assert.match(panelText, /"className":"wsl-seg wsl-filter"/)
 assert.match(panelText, /"className":"wsl-icon-toggle"/)
 assert.match(panelText, /"aria-label":"按域名分组"/)
-assert.match(panelText, /"aria-pressed":"true"/, 'scope and filters expose their pressed state')
-assert.match(panelText, /"role":"group"/, 'segmented controls are grouped for assistive tech')
+assert.match(panelText, /"aria-checked":"true"/, 'scope and filters expose the selected option')
+assert.match(panelText, /"role":"radiogroup"/, 'segmented controls are grouped for assistive tech')
 assert.match(panelText, /"className":"wsl-stat-visual"/, 'visual counters sit next to an accessible summary')
 assert.match(panelText, /"aria-live":"polite"/, 'panel state changes are announced')
 assert.doesNotMatch(panelText, /"children":\["按域名分组"\]/)
@@ -830,6 +841,7 @@ try {
   assert.match(filteredText, /已按筛选隐藏 2 个抓取页面。/, 'the cited filter also hides fetched pages')
   assert.equal((filteredText.match(/"className":"wsl-fetch"/g) ?? []).length, 0)
   assert.equal((filteredText.match(/"className":"wsl-group-head"/g) ?? []).length, 2)
+  assert.equal(findNode(filteredPanel, 'wsl-group-head').type, 'h4', 'domain groups are headings')
   assert.match(filteredText, /"children":\["A"\]/)
   assert.match(filteredText, /"children":\["B"\]/)
   assert.doesNotMatch(filteredText, /"children":\["C"\]/)
