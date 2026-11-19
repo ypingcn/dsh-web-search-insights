@@ -37,7 +37,7 @@
     "locale/*.json"
   ],
   "scripts": {
-    "test": "node test/url-utils.test.mjs && node test/projection.test.mjs && node test/client.test.mjs && node test/quick-search.test.mjs && node test/unit.mjs",
+    "test": "node test/url-utils.test.mjs && node test/projection.test.mjs && node test/client.test.mjs && node test/quick-search.test.mjs && node test/log-browser.test.mjs && node test/unit.mjs",
     "check": "node --check lib/client.js"
   },
   "engines": {

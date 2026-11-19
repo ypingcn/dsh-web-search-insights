@@ -34,6 +34,9 @@ const fakeReact = {
     return [typeof initial === 'function' ? initial() : initial, () => {}]
   },
   useEffect() {},
+  useLayoutEffect() {},
+  useCallback: (fn) => fn,
+  useMemo: (fn) => fn(),
   useRef(initial) {
     return { current: initial }
   },
@@ -463,6 +466,20 @@ assert.equal(footButtons[1].children[0], '重置全部')
   assert.equal(model.saveCalls, 1, 'reset-all saves immediately instead of waiting for Save')
 }
 
+// The audit log browser sits at the bottom of the config card, collapsed by
+// default so it never triggers a log read until the user asks for one.
+{
+  const logSection = findClass(configCard, 'wsl-log')
+  assert.ok(logSection, 'the config card renders the audit log browser')
+  assert.equal(findClass(configCard, 'wsl-log-title').children[0], '审计日志')
+  const logToggle = findClass(configCard, 'wsl-log-toggle')
+  assert.ok(logToggle, 'the log browser has an expand toggle')
+  assert.equal(logToggle.children[0], '展开日志', 'collapsed by default')
+  assert.equal(logToggle.props['aria-expanded'], 'false')
+  assert.equal(findClass(configCard, 'wsl-log-list'), undefined, 'no records load while collapsed')
+  assert.equal(findClass(configCard, 'wsl-log-search-input'), undefined, 'the search box appears only when open')
+}
+
 const entryElement = turnTail.component({
   turn: { turn: 1 },
   useProjection: (_key, selector) => selector(fixture),
@@ -756,8 +773,8 @@ assert.ok(
 )
 assert.deepEqual(
   toolbarNode.children.map((child) => child.props?.className),
-  ['wsl-seg wsl-scope', 'wsl-seg wsl-filter', 'wsl-icon-toggle'],
-  'scope track, filter track and grouping toggle are separate toolbar children',
+  ['wsl-search', 'wsl-seg wsl-scope', 'wsl-seg wsl-filter', 'wsl-icon-toggle'],
+  'keyword search, scope track, filter track and grouping toggle are separate toolbar children',
 )
 
 // Keyword folding keeps two rendered rows: the measured cutoff decides how
