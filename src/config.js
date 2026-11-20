@@ -55,6 +55,8 @@ export const Config = z?.object({
   recordErrors: z.boolean().default(true).volatile(),
   /** Show the "quick search" conversation view. Browser-side gate. */
   quickSearchView: z.boolean().default(true).volatile(),
+  /** Show the right-sidebar "search statistics" tab. Browser-side gate. */
+  statsPanel: z.boolean().default(true).volatile(),
   /** Show the turn-tail entry for turns that only fetched pages. Browser-side gate. */
   fetchEntry: z.boolean().default(true).volatile(),
   /** Rotate the active log at this size in MB; 0 disables size rotation. */
@@ -90,7 +92,7 @@ function assertConfigTypes(source) {
   if (source.enabled !== undefined && typeof source.enabled !== 'boolean') {
     throw new TypeError('web-search-insights: `enabled` must be a boolean')
   }
-  for (const field of ['recordErrors', 'quickSearchView', 'fetchEntry']) {
+  for (const field of ['recordErrors', 'quickSearchView', 'statsPanel', 'fetchEntry']) {
     if (source[field] !== undefined && typeof source[field] !== 'boolean') {
       throw new TypeError(`web-search-insights: \`${field}\` must be a boolean`)
     }
@@ -141,6 +143,7 @@ function megabytesToBytes(value) {
  *   file: string,
  *   recordErrors: boolean,
  *   quickSearchView: boolean,
+ *   statsPanel: boolean,
  *   fetchEntry: boolean,
  *   maxSizeMb: number,
  *   maxBytes: number,
@@ -168,6 +171,7 @@ export function normalizeConfig(config) {
         : resolveHostPath(legacyFile ?? DEFAULT_FILE),
     recordErrors: source.recordErrors !== false,
     quickSearchView: source.quickSearchView !== false,
+    statsPanel: source.statsPanel !== false,
     fetchEntry: source.fetchEntry !== false,
     maxSizeMb,
     maxBytes: megabytesToBytes(maxSizeMb),
@@ -207,6 +211,7 @@ export function snapshotConfig(config) {
     file: readConfigField(config, 'file'),
     recordErrors: readConfigField(config, 'recordErrors'),
     quickSearchView: readConfigField(config, 'quickSearchView'),
+    statsPanel: readConfigField(config, 'statsPanel'),
     fetchEntry: readConfigField(config, 'fetchEntry'),
     maxSizeMb: readConfigField(config, 'maxSizeMb'),
     maxFiles: readConfigField(config, 'maxFiles'),

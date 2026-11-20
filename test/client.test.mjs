@@ -137,6 +137,16 @@ assert.equal(client.name, packageName)
 assert.equal(typeof client.apply, 'function')
 assert.ok(client.inject.includes('slots'))
 assert.ok(client.inject.includes('sidebarRightTabs'))
+assert.ok(client.inject.includes('layout'), 'the global main panel needs the layout service')
+const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+assert.ok(
+  manifest.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-layout'),
+  'the client graph must load the layout panel slots',
+)
+assert.ok(
+  manifest.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-sidebar'),
+  'the client graph must load the left sidebar panel list',
+)
 
 const registrations = []
 const tabs = []
@@ -217,6 +227,7 @@ const fakeCtx = {
 }
 
 client.apply(fakeCtx)
+const t = fakeCtx.locale.bind('dsh-web-search-insights')
 
 const turnTail = registrations.find((entry) => entry.options.name === 'conversation.chat.turnTail')
 assert.ok(turnTail, 'turn-tail entry must be registered')
@@ -230,6 +241,39 @@ const pane = registrations.find((entry) => entry.options.name === 'sidebar.right
 assert.ok(pane, 'sidebar pane body must be registered')
 assert.equal(pane.options.key, 'dsh-web-search-insights')
 assert.ok(tabs.some((tab) => tab && tab.kind === 'web-search-insights'), 'sidebar type must be registered')
+
+const statsPane = registrations.find(
+  (entry) =>
+    entry.options.name === 'sidebar.right.pane.tab' && entry.options.key === 'dsh-web-search-stats',
+)
+assert.ok(statsPane, 'statistics pane body must be registered')
+assert.ok(
+  tabs.some((tab) => tab && tab.kind === 'web-search-stats'),
+  'statistics sidebar type must be registered',
+)
+assert.ok(
+  tabs.some((tab) => tab && tab.guide?.[0]?.id === 'dsh-web-search-stats'),
+  'the statistics tab advertises its guide entry',
+)
+
+const statsMain = registrations.find(
+  (entry) => entry.options.name === 'main' && entry.options.key === 'dsh-web-search-stats',
+)
+assert.ok(statsMain, 'statistics global main panel must be registered')
+const statsNav = registrations.find(
+  (entry) =>
+    entry.options.name === 'sidebar.panellist' && entry.options.id === 'dsh-web-search-stats',
+)
+assert.ok(statsNav, 'statistics left-nav row must be registered')
+assert.equal(statsNav.options.id, statsMain.options.key, 'the nav row addresses its main panel')
+assert.equal(statsNav.options.order, 20, 'the row sits after Schedules')
+const statsMainText = JSON.stringify(statsMain.component({ t }))
+assert.match(statsMainText, /wss-main/, 'the global page owns its scroll container')
+assert.match(statsMainText, /"type":"h1"/, 'the global page has a top-level heading')
+assert.match(statsMainText, /搜索统计/, 'the global page renders the same statistics view')
+const statsIcon = statsNav.component({ size: 16, active: false })
+assert.equal(statsIcon.type, 'svg', 'the nav row supplies a bar-chart glyph')
+assert.equal(statsIcon.props.width, 16, 'the glyph honours the sidebar size')
 
 const fixture = {
   v: 1,
@@ -260,8 +304,6 @@ const fixture = {
     },
   },
 }
-
-const t = fakeCtx.locale.bind('dsh-web-search-insights')
 
 // Every `t()` call must resolve: a missing key renders the key itself, which
 // this fallback bind makes visible below.
@@ -298,6 +340,220 @@ const quickSubmit = elementsOfType(quickElement, 'button').find(
 assert.ok(quickSubmit, 'the search button renders')
 assert.equal(quickSubmit.props.disabled, false, 'an empty query is submitted so validation can explain it')
 assert.match(quickText, /"5".*"10".*"15".*"20"/)
+
+assert.match(JSON.stringify(statsPane.component({ t })), /"type":"h2"/, 'the sidebar keeps a section heading')
+
+const statsElement = statsPane.component({ t })
+const statsText = JSON.stringify(statsElement)
+assert.match(statsText, /搜索统计/, 'the statistics tab has its own heading')
+assert.match(statsText, /统计范围/, 'the range selector is labelled')
+assert.match(statsText, /最近 30 天/, 'the default window is 30 days')
+assert.match(statsText, /正在统计/, 'the first render announces aggregation')
+assert.match(statsText, /"role":"status"/, 'statistics status text is announced')
+assert.match(statsText, /"aria-live":"polite"/, 'statistics status uses a polite live region')
+assert.equal(elementsOfType(statsElement, 'progress').length, 1, 'loading renders a progress control')
+assert.match(statsText, /wss-page/, 'the panel uses its own layout class')
+assert.equal(
+  (statsText.match(/"role":"radiogroup"/g) ?? []).length,
+  1,
+  'the range segment is a radio group',
+)
+assert.match(
+  statsText,
+  /"role":"radio","aria-checked":"true"[^}]*"tabIndex":0/,
+  'only the selected option is tabbable',
+)
+
+// The fake React never runs effects, so seed the two states the fetch would
+// settle (`data` and `status`) and exercise the full statistics branch.
+const statsFixture = {
+  timeZone: 'Asia/Shanghai',
+  from: '2026-11-14',
+  to: '2026-11-20',
+  generatedAt: '2026-11-20T10:00:00.000Z',
+  coverage: { files: 2, unreadableFiles: 0, matchedRecords: 5, earliestDay: '2026-11-01' },
+  totals: { calls: 5, queries: 9, sessions: 2, failedCalls: 1, sources: 30 },
+  daily: Array.from({ length: 7 }, (_, index) => ({
+    day: `2026-11-${String(14 + index).padStart(2, '0')}`,
+    calls: index + 1,
+    queries: index + 2,
+    sessions: 1,
+    failedCalls: index === 6 ? 1 : 0,
+    sources: index * 2,
+  })),
+  keywords: {
+    queries: {
+      total: 9,
+      distinct: 2,
+      overflow: 0,
+      items: [
+        { text: 'dsh 插件开发', count: 6 },
+        { text: 'web search', count: 3 },
+      ],
+    },
+    terms: {
+      total: 12,
+      distinct: 2,
+      overflow: 0,
+      items: [
+        { text: 'dsh', count: 6 },
+        { text: '插件开发', count: 6 },
+      ],
+    },
+  },
+}
+stateOverrides.set(null, statsFixture)
+stateOverrides.set('loading', 'ready')
+stateOverrides.set(30, 7)
+const statsReadyElement = statsPane.component({ t })
+const statsReadyText = JSON.stringify(statsReadyElement)
+stateOverrides.clear()
+
+assert.match(statsReadyText, /搜索次数/, 'the ready view shows the call metric')
+assert.match(statsReadyText, /关键词分布/, 'the ready view shows the keyword section')
+assert.equal(
+  (statsReadyText.match(/"role":"tablist"/g) ?? []).length,
+  1,
+  'the calls and keywords views share one tab list',
+)
+assert.equal(
+  (statsReadyText.match(/"role":"tab"/g) ?? []).length,
+  3,
+  'the view switcher exposes all three tabs',
+)
+assert.match(
+  statsReadyText,
+  /"role":"tab"[^}]*"aria-selected":"true"[^}]*"tabIndex":0/,
+  'the selected tab is tabbable',
+)
+assert.match(
+  statsReadyText,
+  /"role":"tab"[^}]*"aria-selected":"false"[^}]*"tabIndex":-1/,
+  'the unselected tabs stay out of the tab order',
+)
+assert.equal(
+  (statsReadyText.match(/"role":"tabpanel"/g) ?? []).length,
+  3,
+  'all three views render as tab panels',
+)
+assert.match(
+  statsReadyText,
+  /"aria-labelledby":"[^"]*","hidden":false/,
+  'the calls panel starts visible',
+)
+assert.match(
+  statsReadyText,
+  /"aria-labelledby":"[^"]*","hidden":true/,
+  'the other panels start hidden instead of stacking below',
+)
+assert.match(statsReadyText, /dsh 插件开发/, 'whole-query ranking renders')
+assert.match(
+  statsReadyText,
+  /"aria-label":"共 5 次搜索，最高 7 次（2026-11-20）"/,
+  'the chart summarises the window for screen readers',
+)
+assert.match(statsReadyText, /已更新 7 天的统计/, 'the ready state is announced once data lands')
+assert.equal(
+  (statsReadyText.match(/"role":"radiogroup"/g) ?? []).length,
+  2,
+  'the ready view exposes both range and keyword-mode radio groups',
+)
+assert.equal(
+  statsReadyText.match(/"className":"wss-bar"/g)?.length,
+  7,
+  'one bar per day in the window',
+)
+assert.equal(
+  elementsOfType(statsReadyElement, 'table').length,
+  0,
+  'the daily table starts collapsed',
+)
+assert.match(statsReadyText, /时区：Asia\/Shanghai/, 'the resolved time zone is echoed')
+assert.match(statsReadyText, /2026-11-01/, 'the earliest retained day is reported')
+
+// Selecting the keyword tab flips the two panels instead of appending the
+// keyword list below the chart.
+stateOverrides.set(null, statsFixture)
+stateOverrides.set('loading', 'ready')
+stateOverrides.set(30, 7)
+stateOverrides.set('calls', 'keywords')
+const statsKeywordsElement = statsPane.component({ t })
+stateOverrides.clear()
+const statsKeywordsText = JSON.stringify(statsKeywordsElement)
+assert.match(
+  statsKeywordsText,
+  /"role":"tab"[^}]*"id":"wss-keywords-tab-[^"]*"[^}]*"aria-selected":"true"/,
+  'the keyword tab owns the selection',
+)
+assert.match(
+  statsKeywordsText,
+  /"role":"tabpanel"[^}]*"hidden":true.*"role":"tabpanel"[^}]*"hidden":false/,
+  'the calls panel hides while the keyword panel shows',
+)
+assert.match(statsKeywordsText, /关键词共出现 9 次/, 'the keyword panel keeps its summary')
+const keywordPanel = elementsOfType(statsKeywordsElement, 'section').find((node) =>
+  String(node.props?.id ?? '').startsWith('wss-keywords-panel-'),
+)
+assert.ok(keywordPanel, 'the keyword panel is addressable by its tab')
+assert.doesNotMatch(
+  JSON.stringify(keywordPanel),
+  /wss-cloud/,
+  'the word cloud is a peer view, not nested under keyword distribution',
+)
+
+// The cloud tab is a peer of the calls and keyword tabs.
+stateOverrides.set(null, statsFixture)
+stateOverrides.set('loading', 'ready')
+stateOverrides.set(30, 7)
+stateOverrides.set('calls', 'cloud')
+const statsCloudElement = statsPane.component({ t })
+stateOverrides.clear()
+const statsCloudText = JSON.stringify(statsCloudElement)
+assert.match(
+  statsCloudText,
+  /"role":"tab"[^}]*"id":"wss-cloud-tab-[^"]*"[^}]*"aria-selected":"true"/,
+  'the cloud tab owns the selection',
+)
+assert.match(
+  statsCloudText,
+  /"role":"tabpanel"[^}]*"hidden":true.*"role":"tabpanel"[^}]*"hidden":true.*"role":"tabpanel"[^}]*"hidden":false/,
+  'the calls and keyword panels hide while the cloud shows',
+)
+assert.match(statsCloudText, /分词共出现 12 次/, 'the cloud panel summarises tokenised totals')
+assert.match(
+  statsCloudText,
+  /点击词汇可在「关键词分布」中过滤/,
+  'the cloud explains its click-through behaviour',
+)
+assert.equal(
+  (statsCloudText.match(/"className":"wss-cloud-word/g) ?? []).length,
+  2,
+  'the cloud uses the tokenised terms',
+)
+assert.match(
+  statsCloudText,
+  /"children":\["插件开发"\]/,
+  'a token that only exists after segmentation appears in the cloud',
+)
+assert.match(
+  statsCloudText,
+  /"fontSize":"26px"/,
+  'cloud words scale to the most frequent token',
+)
+assert.match(
+  statsCloudText,
+  /「dsh」出现 6 次，点击过滤/,
+  'each cloud word announces its count and action',
+)
+const cloudButtons = elementsOfType(statsCloudElement, 'button').filter(
+  (node) => node.props?.className === 'wss-cloud-word',
+)
+assert.equal(cloudButtons.length, 2, 'each cloud word is an interactive button')
+assert.equal(
+  typeof cloudButtons[0]?.props?.onClick,
+  'function',
+  'clicking a cloud word jumps to the filtered ranked list',
+)
 
 /** Depth-first search over fake React element trees. */
 function elementsOfType(node, type, found = []) {
@@ -398,6 +654,7 @@ assert.match(configText, /wsi-directory/)
 assert.doesNotMatch(configText, /wsi-file/, 'the legacy path is not rendered')
 assert.match(configText, /记录失败调用/)
 assert.match(configText, /快速搜索页面/)
+assert.match(configText, /搜索统计面板/)
 assert.match(configText, /纯抓取轮次显示入口/)
 assert.doesNotMatch(configText, /观察工具/, 'the ineffective tools setting is gone')
 assert.match(configText, /日志大小上限（MB）/)
@@ -419,12 +676,18 @@ assert.deepEqual(
 )
 assert.equal(
   (configText.match(/"className":"wsi-field wsi-field-toggle"/g) ?? []).length,
-  4,
-  'all four toggles share the two-column grid',
+  5,
+  'all five toggles share the two-column grid',
 )
 assert.deepEqual(
   elementsOfType(configCard, 'switch').map((node) => node.props.id),
-  ['wsi-enabled', 'wsi-record-errors', 'wsi-quick-search-view', 'wsi-fetch-entry'],
+  [
+    'wsi-enabled',
+    'wsi-record-errors',
+    'wsi-quick-search-view',
+    'wsi-stats-panel',
+    'wsi-fetch-entry',
+  ],
   'each switch id matches its label so clicking the label toggles the control',
 )
 assert.equal(
@@ -454,6 +717,7 @@ assert.equal(footButtons[1].children[0], '重置全部')
       'enabled',
       'recordErrors',
       'quickSearchView',
+      'statsPanel',
       'fetchEntry',
       'directory',
       'file',
@@ -936,6 +1200,7 @@ assert.match(manyText, /加载更多（剩余 10 轮）/)
 // The quick-search view follows the `quickSearchView` switch.
 {
   const offRegistrations = []
+  let offSelectedPanel
   const offCtx = {
     effect(fn) {
       return fn()
@@ -951,7 +1216,7 @@ assert.match(manyText, /加载更多（剩余 10 轮）/)
                 revision: 1,
                 base: {},
                 user: undefined,
-                value: { enabled: true, quickSearchView: false, fetchEntry: false },
+                value: { enabled: true, quickSearchView: false, statsPanel: false, fetchEntry: false },
               }),
               subscribe() {
                 return () => {}
@@ -974,6 +1239,12 @@ assert.match(manyText, /加载更多（剩余 10 轮）/)
         return (key) => key
       },
     },
+    layout: {
+      panelInfo: { getSnapshot: () => ({ activePanelId: 'dsh-web-search-stats' }) },
+      selectPanel(panelId) {
+        offSelectedPanel = panelId
+      },
+    },
     sidebarRightTabs: { register() { return () => {} } },
     sidebarRight: { openTab() {} },
     slots: {
@@ -981,8 +1252,12 @@ assert.match(manyText, /加载更多（剩余 10 轮）/)
         return factory()
       },
       register(options, component) {
-        offRegistrations.push({ options, component })
-        return () => {}
+        const entry = { options, component }
+        offRegistrations.push(entry)
+        return () => {
+          const index = offRegistrations.indexOf(entry)
+          if (index >= 0) offRegistrations.splice(index, 1)
+        }
       },
     },
   }
@@ -991,6 +1266,36 @@ assert.match(manyText, /加载更多（剩余 10 轮）/)
     offRegistrations.some((entry) => entry.options.name === 'conversation.view'),
     false,
     'disabling quickSearchView removes the view',
+  )
+  assert.equal(
+    offRegistrations.some(
+      (entry) =>
+        entry.options.name === 'sidebar.right.pane.tab' &&
+        entry.options.key === 'dsh-web-search-stats',
+    ),
+    false,
+    'disabling statsPanel removes the statistics pane',
+  )
+  assert.equal(
+    offRegistrations.some(
+      (entry) => entry.options.name === 'main' && entry.options.key === 'dsh-web-search-stats',
+    ),
+    false,
+    'disabling statsPanel removes the global main panel',
+  )
+  assert.equal(
+    offRegistrations.some(
+      (entry) =>
+        entry.options.name === 'sidebar.panellist' &&
+        entry.options.id === 'dsh-web-search-stats',
+    ),
+    false,
+    'disabling statsPanel removes the left-nav row',
+  )
+  assert.equal(
+    offSelectedPanel,
+    null,
+    'disabling while the page is open returns to the conversation',
   )
   const offFetchOnlyEntry = turnTail.component({
     turn: { turn: 3 },

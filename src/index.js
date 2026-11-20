@@ -25,6 +25,7 @@
 import { Config, snapshotConfig } from './config.js'
 import { installLogBrowserRoute } from './log-browser.js'
 import { installQuickSearchRoute } from './quick-search.js'
+import { installStatsRoute } from './stats.js'
 import { webSearchInsightsDefinition } from './projection.js'
 import { buildRecord } from './record.js'
 import { JsonlWriter } from './writer.js'
@@ -35,6 +36,7 @@ export { buildRecord, normalizeQueries } from './record.js'
 export { JsonlWriter } from './writer.js'
 export { installLogBrowserRoute, LOG_BROWSER_PATH } from './log-browser.js'
 export { installQuickSearchRoute, QUICK_SEARCH_PATH } from './quick-search.js'
+export { installStatsRoute, STATS_PATH, aggregateLogs, listLogFiles } from './stats.js'
 
 /** Cordis plugin name; also the default loader row id. */
 export const name = 'web-search-insights'
@@ -83,6 +85,7 @@ export function apply(ctx, config) {
   syncProjection()
   installQuickSearchRoute(ctx)
   installLogBrowserRoute(ctx, () => options.file)
+  installStatsRoute(ctx, () => options.file)
 
   // The configuration page lives in the plugin manager. Suppress any future
   // auto-generated settings page for this entry so it never appears twice.

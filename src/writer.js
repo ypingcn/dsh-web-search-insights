@@ -16,8 +16,8 @@
 import { appendFile, mkdir, readdir, rename, stat, unlink } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 
-/** Suffix of a rotated file; also the guard for cleanup. */
-const ROTATION_SUFFIX = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(?:-\d+)?$/u
+/** Suffix of a rotated file; also the guard for cleanup. Shared with the stats reader. */
+export const ROTATION_SUFFIX = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z(?:-\d+)?$/u
 
 /** Read a non-negative integer limit, falling back to "disabled". */
 function readLimit(value) {

@@ -74,6 +74,8 @@ export interface Config {
   recordErrors?: boolean
   /** Show the "quick search" conversation view (browser-side switch). */
   quickSearchView?: boolean
+  /** Show the right-sidebar "search statistics" tab (browser-side switch). */
+  statsPanel?: boolean
   /** Show the turn-tail entry for turns that only fetched pages (browser-side switch). */
   fetchEntry?: boolean
   /** Rotate the active log at this many MB; 0 disables rotation. */
@@ -85,3 +87,56 @@ export interface Config {
 }
 
 export declare function apply(ctx: Context, config?: Config): () => Promise<void>
+
+/** One day's counters in the statistics panel. */
+export interface SearchStatsDay {
+  day: string
+  calls: number
+  queries: number
+  sessions: number
+  failedCalls: number
+  sources: number
+}
+
+/** One ranked keyword entry. */
+export interface SearchStatsKeyword {
+  text: string
+  count: number
+}
+
+/** Aggregated search usage returned by the stats route. */
+export interface SearchStats {
+  timeZone: string
+  from: string
+  to: string
+  generatedAt: string
+  coverage: {
+    files: number
+    unreadableFiles: number
+    matchedRecords: number
+    earliestDay?: string
+  }
+  totals: {
+    calls: number
+    queries: number
+    sessions: number
+    failedCalls: number
+    sources: number
+  }
+  daily: SearchStatsDay[]
+  keywords: {
+    queries: { total: number; distinct: number; overflow: number; items: SearchStatsKeyword[] }
+    terms: { total: number; distinct: number; overflow: number; items: SearchStatsKeyword[] }
+  }
+}
+
+export declare const STATS_PATH: '/api/dsh-web-search-insights/stats'
+
+export declare function listLogFiles(activeFile: string): Promise<string[]>
+
+export declare function aggregateLogs(
+  files: string[],
+  options?: { days?: number; timeZone?: string; now?: number; maxKeywords?: number },
+): Promise<SearchStats>
+
+export declare function installStatsRoute(ctx: Context, getFile: () => string): void
